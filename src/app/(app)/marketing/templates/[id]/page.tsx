@@ -20,6 +20,7 @@ export default async function MarketingTemplateDetail({ params }: { params: { id
           subject: template.subject,
           previewText: template.previewText,
           designJson: template.designJson,
+          html: template.html,
         }}
       />
     </div>
