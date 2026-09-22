@@ -1,0 +1,623 @@
+// ABTalks Email Infrastructure — Prisma schema.
+//
+// Design principles:
+//   * One shared pipeline for MARKETING and TRANSACTIONAL email. EmailJob is
+//     the single unit of work for both. `emailType` is the discriminator.
+//   * `Suppression` is category-aware: unsubscribing from marketing does not
+//     block essential transactional (password reset, security).
+//   * Every EmailJob has an `idempotencyKey` UNIQUE — retries never send twice.
+//   * Registered ABTalks users are NOT copied; `RegisteredUserRef` is a thin
+//     projection keyed by their upstream id. The ABTalks DB stays source of
+//     truth (read-only bridge via ABTALKS_DB_URL).
+//   * Every marketing send is filtered server-side against Suppression before
+//     touching SES.
+//
+// Naming: table names are snake_case via @@map so the DB is readable in psql.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  MARKETER
+  VIEWER
+
+  @@map("role")
+}
+
+enum EmailCategory {
+  MARKETING
+  TRANSACTIONAL_NONESSENTIAL
+  TRANSACTIONAL_ESSENTIAL
+
+  @@map("email_category")
+}
+
+enum EmailType {
+  MARKETING
+  TRANSACTIONAL
+
+  @@map("email_type")
+}
+
+enum CampaignStatus {
+  DRAFT
+  SCHEDULED
+  QUEUED
+  SENDING
+  PAUSED
+  COMPLETED
+  CANCELLED
+  FAILED
+
+  @@map("campaign_status")
+}
+
+enum EmailJobStatus {
+  PENDING
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  BOUNCED
+  COMPLAINED
+  FAILED
+  SKIPPED
+
+  @@map("email_job_status")
+}
+
+enum EmailEventType {
+  SEND
+  DELIVERY
+  BOUNCE
+  COMPLAINT
+  OPEN
+  CLICK
+  REJECT
+  RENDERING_FAILURE
+
+  @@map("email_event_type")
+}
+
+enum SuppressionReason {
+  UNSUBSCRIBE
+  HARD_BOUNCE
+  COMPLAINT
+  MANUAL
+
+  @@map("suppression_reason")
+}
+
+enum ConsentStatus {
+  UNKNOWN
+  IMPLIED
+  EXPLICIT
+  WITHDRAWN
+
+  @@map("consent_status")
+}
+
+enum ContactSource {
+  IMPORT
+  MANUAL
+  API
+  ABTALKS_USER
+
+  @@map("contact_source")
+}
+
+enum ImportJobStatus {
+  PENDING
+  PARSING
+  VALIDATING
+  IMPORTING
+  COMPLETED
+  FAILED
+  CANCELLED
+
+  @@map("import_job_status")
+}
+
+enum ConversionStage {
+  CLICK
+  REGISTRATION
+  ASSESSMENT_STARTED
+  ASSESSMENT_COMPLETED
+
+  @@map("conversion_stage")
+}
+
+// ---------------------------------------------------------------------------
+// Internal app users (staff — separate from ABTalks students)
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  name           String
+  hashedPassword String   @map("hashed_password")
+  role           Role     @default(VIEWER)
+  isActive       Boolean  @default(true) @map("is_active")
+  lastLoginAt    DateTime? @map("last_login_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  campaigns   Campaign[]
+  importJobs  ImportJob[]
+  auditLogs   AuditLog[]
+  createdTemplates          EmailTemplate[]        @relation("template_created_by")
+  createdTransactionalTpls  TransactionalTemplate[] @relation("txn_template_created_by")
+
+  @@map("users")
+}
+
+// ---------------------------------------------------------------------------
+// Marketing contacts (external prospects) — unique on normalized email
+// ---------------------------------------------------------------------------
+
+model MarketingContact {
+  id                 String        @id @default(cuid())
+  email              String        @unique // ALWAYS lowercased on write (see normalizeEmail)
+  firstName          String?       @map("first_name")
+  lastName           String?       @map("last_name")
+  phone              String?
+  college            String?
+  branch             String?
+  year               String?
+  graduationYear     Int?          @map("graduation_year")
+  registrationStatus String?       @map("registration_status") // e.g. NOT_REGISTERED / REGISTERED
+  source             ContactSource @default(IMPORT)
+  consentStatus      ConsentStatus @default(IMPLIED) @map("consent_status")
+  consentDate        DateTime?     @map("consent_date")
+  meta               Json?         // arbitrary extra CSV columns preserved as JSON
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tags        ContactTagOnContact[]
+  emailJobs   EmailJob[]
+  conversions ConversionEvent[]
+
+  @@index([college, branch, year])
+  @@index([registrationStatus])
+  @@index([consentStatus])
+  @@index([createdAt])
+  @@map("marketing_contacts")
+}
+
+// Read-only projection of ABTalks main users; NOT the source of truth.
+// Refreshed via a scheduled sync job. Keyed by upstream id + normalized email.
+model RegisteredUserRef {
+  id            String   @id @default(cuid())
+  abtalksUserId String   @unique @map("abtalks_user_id")
+  email         String   @unique
+  firstName     String?  @map("first_name")
+  lastName      String?  @map("last_name")
+  college       String?
+  branch        String?
+  year          String?
+  syncedAt      DateTime @default(now()) @map("synced_at")
+
+  emailJobs   EmailJob[]
+  conversions ConversionEvent[]
+
+  @@index([college, branch, year])
+  @@map("registered_user_refs")
+}
+
+model ContactTag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  contacts ContactTagOnContact[]
+
+  @@map("contact_tags")
+}
+
+model ContactTagOnContact {
+  contactId String @map("contact_id")
+  tagId     String @map("tag_id")
+
+  contact MarketingContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag     ContactTag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+  @@map("contact_tag_on_contact")
+}
+
+// ---------------------------------------------------------------------------
+// Segments
+// ---------------------------------------------------------------------------
+
+model Segment {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  // JSON tree of conditions (AND/OR nested). Evaluated server-side and
+  // compiled into a Prisma `where` before campaign creation.
+  rules        Json
+  audienceSize Int?     @map("audience_size") // cached last-computed size
+  computedAt   DateTime? @map("computed_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  campaigns Campaign[]
+
+  @@map("segments")
+}
+
+// ---------------------------------------------------------------------------
+// Templates
+// ---------------------------------------------------------------------------
+
+// Marketing templates — Unlayer visual editor
+model EmailTemplate {
+  id           String   @id @default(cuid())
+  name         String
+  category     String   // Placement Drive / Workshop / Hackathon / Newsletter / etc.
+  subject      String
+  previewText  String?  @map("preview_text")
+  designJson   Json     @map("design_json") // Unlayer design blob
+  html         String   @db.Text // compiled HTML
+  variables    String[] // declared personalization keys (first_name, college, ...)
+  createdById  String?  @map("created_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  createdBy User?      @relation("template_created_by", fields: [createdById], references: [id])
+  campaigns Campaign[]
+
+  @@index([category])
+  @@map("email_templates")
+}
+
+// Transactional templates — keyed by template_key, versioned, immutable rows.
+// `active` row per key is the one used at send time.
+model TransactionalTemplate {
+  id            String        @id @default(cuid())
+  templateKey   String        @map("template_key") // e.g. welcome_email
+  version       Int           @default(1)
+  name          String
+  subject       String
+  html          String        @db.Text
+  text          String?       @db.Text
+  variables     String[]      // declared required variables
+  category      EmailCategory @default(TRANSACTIONAL_NONESSENTIAL)
+  isActive      Boolean       @default(false) @map("is_active")
+  createdById   String?       @map("created_by_id")
+  createdAt     DateTime      @default(now()) @map("created_at")
+
+  createdBy User? @relation("txn_template_created_by", fields: [createdById], references: [id])
+  rules     EmailEventRule[]
+
+  @@unique([templateKey, version])
+  @@index([templateKey, isActive])
+  @@map("transactional_templates")
+}
+
+// Event → template mapping. Triggered by ABTalks main app via HMAC API.
+model EmailEventRule {
+  id               String   @id @default(cuid())
+  eventType        String   @unique @map("event_type") // e.g. USER_REGISTERED
+  description      String?
+  templateKey      String   @map("template_key")
+  isActive         Boolean  @default(true) @map("is_active")
+  requiredVars     String[] @map("required_vars")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  templates TransactionalTemplate[]
+
+  @@map("email_event_rules")
+}
+
+// ---------------------------------------------------------------------------
+// Campaigns
+// ---------------------------------------------------------------------------
+
+model Campaign {
+  id             String         @id @default(cuid())
+  name           String
+  slug           String         @unique // used in UTM utm_campaign
+  subject        String
+  previewText    String?        @map("preview_text")
+  fromName       String         @map("from_name")
+  fromEmail      String         @map("from_email")
+  replyTo        String?        @map("reply_to")
+
+  status         CampaignStatus @default(DRAFT)
+  templateId     String?        @map("template_id")
+  segmentId      String?        @map("segment_id")
+
+  scheduledAt    DateTime?      @map("scheduled_at")
+  startedAt      DateTime?      @map("started_at")
+  completedAt    DateTime?      @map("completed_at")
+  cancelledAt    DateTime?      @map("cancelled_at")
+
+  totalRecipients Int           @default(0) @map("total_recipients")
+  sentCount       Int           @default(0) @map("sent_count")
+  deliveredCount  Int           @default(0) @map("delivered_count")
+  bouncedCount    Int           @default(0) @map("bounced_count")
+  complainedCount Int           @default(0) @map("complained_count")
+  openedCount     Int           @default(0) @map("opened_count")
+  clickedCount    Int           @default(0) @map("clicked_count")
+  unsubscribedCount Int         @default(0) @map("unsubscribed_count")
+
+  createdById    String?        @map("created_by_id")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  template   EmailTemplate?      @relation(fields: [templateId], references: [id])
+  segment    Segment?            @relation(fields: [segmentId], references: [id])
+  createdBy  User?               @relation(fields: [createdById], references: [id])
+  recipients CampaignRecipient[]
+  jobs       EmailJob[]
+  conversions ConversionEvent[]
+
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("campaigns")
+}
+
+// One row per recipient per campaign. UNIQUE ensures a retry can't create a
+// second row for the same (campaign, contact) pair.
+model CampaignRecipient {
+  id            String   @id @default(cuid())
+  campaignId    String   @map("campaign_id")
+  emailJobId    String?  @unique @map("email_job_id")
+  contactId     String?  @map("contact_id")            // MarketingContact.id if applicable
+  registeredUserRefId String? @map("registered_user_ref_id")
+  email         String                                  // snapshot at send time
+  variables     Json                                    // resolved personalization payload
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  emailJob EmailJob? @relation(fields: [emailJobId], references: [id])
+
+  @@unique([campaignId, email])
+  @@index([campaignId])
+  @@map("campaign_recipients")
+}
+
+// ---------------------------------------------------------------------------
+// EmailJob — the unified send unit for both marketing and transactional.
+// idempotencyKey is UNIQUE: a retry with the same key never sends twice.
+// ---------------------------------------------------------------------------
+
+model EmailJob {
+  id              String         @id @default(cuid())
+  idempotencyKey  String         @unique @map("idempotency_key")
+
+  emailType       EmailType      @map("email_type")
+  category        EmailCategory
+  status          EmailJobStatus @default(PENDING)
+
+  // Recipient (denormalized snapshot — the ABTalks user or Contact may change/delete later)
+  recipientEmail  String         @map("recipient_email")
+  contactId       String?        @map("contact_id")
+  registeredUserRefId String?    @map("registered_user_ref_id")
+
+  // Template routing
+  campaignId      String?        @map("campaign_id")
+  templateKey     String?        @map("template_key")       // for transactional
+  templateVersion Int?           @map("template_version")   // for transactional
+  emailTemplateId String?        @map("email_template_id")  // for marketing
+
+  // Trigger provenance
+  eventType       String?        @map("event_type") // e.g. USER_REGISTERED
+  eventId         String?        @map("event_id")   // caller-supplied idempotency id
+
+  // Rendered content snapshot (kept for auditability / retries)
+  subject         String
+  fromEmail       String         @map("from_email")
+  fromName        String         @map("from_name")
+  replyTo         String?        @map("reply_to")
+  variables       Json           // resolved variables
+  renderedHtml    String?        @db.Text @map("rendered_html")
+  renderedText    String?        @db.Text @map("rendered_text")
+
+  // Delivery result
+  providerMessageId String?      @map("provider_message_id")
+  errorCode         String?      @map("error_code")
+  errorMessage      String?      @db.Text @map("error_message")
+
+  attempts        Int            @default(0)
+  scheduledFor    DateTime?      @map("scheduled_for")
+  queuedAt        DateTime?      @map("queued_at")
+  sentAt          DateTime?      @map("sent_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  campaign         Campaign?          @relation(fields: [campaignId], references: [id])
+  contact          MarketingContact?  @relation(fields: [contactId], references: [id])
+  registeredRef    RegisteredUserRef? @relation(fields: [registeredUserRefId], references: [id])
+  campaignRecipient CampaignRecipient?
+  logs             EmailLog[]
+  events           EmailEvent[]
+
+  @@index([emailType, status])
+  @@index([status, scheduledFor])
+  @@index([campaignId])
+  @@index([recipientEmail])
+  @@index([providerMessageId])
+  @@map("email_jobs")
+}
+
+// One row per attempt/state-change. Provides an authoritative send history.
+model EmailLog {
+  id                String   @id @default(cuid())
+  jobId             String   @map("job_id")
+  attempt           Int
+  providerMessageId String?  @map("provider_message_id")
+  status            EmailJobStatus
+  errorCode         String?  @map("error_code")
+  errorMessage      String?  @db.Text @map("error_message")
+  sentAt            DateTime? @map("sent_at")
+  deliveredAt       DateTime? @map("delivered_at")
+  bouncedAt         DateTime? @map("bounced_at")
+  complainedAt      DateTime? @map("complained_at")
+  openedAt          DateTime? @map("opened_at")
+  clickedAt         DateTime? @map("clicked_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  job EmailJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([providerMessageId])
+  @@map("email_logs")
+}
+
+// Normalized SES events from the SNS webhook.
+model EmailEvent {
+  id                String         @id @default(cuid())
+  jobId             String?        @map("job_id")
+  providerMessageId String?        @map("provider_message_id")
+  type              EmailEventType
+  raw               Json           // full SES event JSON for audit
+  createdAt         DateTime       @default(now()) @map("created_at")
+
+  job EmailJob? @relation(fields: [jobId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([providerMessageId])
+  @@index([jobId, type])
+  @@map("email_events")
+}
+
+// ---------------------------------------------------------------------------
+// Suppression & unsubscribe
+// ---------------------------------------------------------------------------
+
+// (email, category) is unique. Essential transactional emails only bypass
+// when the reason is not HARD_BOUNCE (a hard bounce means the mailbox is dead
+// and even essential mail cannot land).
+model Suppression {
+  id        String            @id @default(cuid())
+  email     String
+  category  EmailCategory
+  reason    SuppressionReason
+  note      String?
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  @@unique([email, category])
+  @@index([email])
+  @@map("suppressions")
+}
+
+model UnsubscribeToken {
+  id         String        @id @default(cuid())
+  token      String        @unique
+  email      String
+  category   EmailCategory @default(MARKETING)
+  campaignId String?       @map("campaign_id")
+  usedAt     DateTime?     @map("used_at")
+  expiresAt  DateTime      @map("expires_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  @@index([email])
+  @@map("unsubscribe_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Imports
+// ---------------------------------------------------------------------------
+
+model ImportJob {
+  id          String          @id @default(cuid())
+  filename    String
+  fileUrl     String?         @map("file_url") // upload location (Vercel Blob / S3)
+  status      ImportJobStatus @default(PENDING)
+  totalRows   Int             @default(0) @map("total_rows")
+  processed   Int             @default(0)
+  imported    Int             @default(0)
+  duplicates  Int             @default(0)
+  invalid     Int             @default(0)
+  skipped     Int             @default(0)
+  columnMap   Json?           @map("column_map")
+  error       String?         @db.Text
+  createdById String?         @map("created_by_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  completedAt DateTime?       @map("completed_at")
+
+  createdBy User?             @relation(fields: [createdById], references: [id])
+  errors    ImportRowError[]
+
+  @@index([status])
+  @@map("import_jobs")
+}
+
+model ImportRowError {
+  id          String   @id @default(cuid())
+  importJobId String   @map("import_job_id")
+  rowNumber   Int      @map("row_number")
+  rowData     Json     @map("row_data")
+  reason      String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  job ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId])
+  @@map("import_row_errors")
+}
+
+// ---------------------------------------------------------------------------
+// Audit log
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  @map("user_id")
+  action     String   // e.g. "campaign.create", "contact.import", "campaign.pause"
+  resource   String?  // e.g. "campaign:abc123"
+  ip         String?
+  userAgent  String?  @map("user_agent") @db.Text
+  metadata   Json?
+  result     String?  // "success" | "failure"
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Conversion attribution (email → registration → assessment)
+// ---------------------------------------------------------------------------
+
+model ConversionEvent {
+  id                  String          @id @default(cuid())
+  campaignId          String?         @map("campaign_id")
+  campaignSlug        String?         @map("campaign_slug") // captured from utm_campaign
+  contactId           String?         @map("contact_id")
+  registeredUserRefId String?         @map("registered_user_ref_id")
+  email               String?
+  stage               ConversionStage
+  metadata            Json?
+  occurredAt          DateTime        @map("occurred_at")
+  createdAt           DateTime        @default(now()) @map("created_at")
+
+  campaign      Campaign?          @relation(fields: [campaignId], references: [id])
+  contact       MarketingContact?  @relation(fields: [contactId], references: [id])
+  registeredRef RegisteredUserRef? @relation(fields: [registeredUserRefId], references: [id])
+
+  @@index([campaignId, stage])
+  @@index([email])
+  @@map("conversion_events")
+}
