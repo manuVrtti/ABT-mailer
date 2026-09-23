@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, Table, THead, TR, TH, TD, Badge, EmptyState, Button } from "@/components/ui";
+import { ContactsTabs } from "../_tabs";
 import type { ImportJobStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export default async function ImportsPage() {
 
   return (
     <div>
+      <ContactsTabs />
       <PageHeader
         title="Import history"
         description="Every CSV upload. Click a job to see rows, duplicates, and any failures."

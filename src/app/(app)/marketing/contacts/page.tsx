@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Users, Search, Upload, FolderClock } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Table, THead, TR, TH, TD, Badge, Button, EmptyState } from "@/components/ui";
+import { ContactsTabs } from "./_tabs";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contacts" };
@@ -45,6 +46,7 @@ export default async function ContactsPage({
 
   return (
     <div>
+      <ContactsTabs />
       <PageHeader
         title="Contacts"
         icon={Users}

@@ -187,6 +187,7 @@ model MarketingContact {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   tags        ContactTagOnContact[]
+  lists       ContactListMember[]
   emailJobs   EmailJob[]
   conversions ConversionEvent[]
 
@@ -236,6 +237,36 @@ model ContactTagOnContact {
 
   @@id([contactId, tagId])
   @@map("contact_tag_on_contact")
+}
+
+// Named contact lists — the Brevo "Lists" concept. A contact can belong to
+// many lists (Candidates, Recruiters, Hackathon Participants, etc.). Lists
+// carry a color so the UI can render them as distinctive chips, and a source
+// (manual / import / api) so we know how the list was populated.
+model ContactList {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  color       String   @default("emerald") // one of: emerald / teal / sky / amber / rose / violet / slate
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  members ContactListMember[]
+
+  @@map("contact_lists")
+}
+
+model ContactListMember {
+  contactId String   @map("contact_id")
+  listId    String   @map("list_id")
+  addedAt   DateTime @default(now()) @map("added_at")
+
+  contact MarketingContact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  list    ContactList      @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, listId])
+  @@index([listId])
+  @@map("contact_list_members")
 }
 
 // ---------------------------------------------------------------------------
