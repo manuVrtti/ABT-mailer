@@ -15,6 +15,7 @@ import {
   ScrollText,
   Settings,
   LogOut,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@prisma/client";
@@ -35,6 +36,7 @@ const NAV: NavItem[] = [
   { href: "/marketing/templates", label: "Templates", group: "marketing", icon: Palette },
   { href: "/marketing/analytics", label: "Analytics", group: "marketing", icon: BarChart3 },
 
+  { href: "/transactional/realtime", label: "Real time", group: "transactional", icon: Activity },
   { href: "/transactional/templates", label: "Templates", group: "transactional", icon: Mail },
   { href: "/transactional/events", label: "Events", group: "transactional", icon: Zap },
   { href: "/transactional/logs", label: "Delivery Logs", group: "transactional", icon: ScrollText },
