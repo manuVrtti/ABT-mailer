@@ -1,7 +1,8 @@
 import { ListChecks } from "lucide-react";
 import { PageHeader, Card, Input, Label, Textarea, Button } from "@/components/ui";
 import { ContactsTabs } from "../../_tabs";
-import { createList, CONTACT_LIST_COLORS } from "../actions";
+import { createList } from "../actions";
+import { CONTACT_LIST_COLORS } from "../_constants";
 import { ColorPicker } from "./_color-picker";
 
 export const metadata = { title: "New contact list" };
