@@ -8,18 +8,7 @@ import { requireRole } from "@/lib/auth/session";
 import { extractVariables } from "@/server/email/render";
 import { EmailService } from "@/server/email";
 import { renderTemplate } from "@/server/email/render";
-
-const CATEGORIES = [
-  "Placement Drive",
-  "Workshop",
-  "Hackathon",
-  "Cohort",
-  "Newsletter",
-  "Announcement",
-  "Reminder",
-  "Welcome",
-  "Custom",
-];
+import { MARKETING_TEMPLATE_CATEGORIES } from "./categories";
 
 export async function saveMarketingTemplate(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
@@ -34,7 +23,8 @@ export async function saveMarketingTemplate(formData: FormData) {
   if (!name) throw new Error("Name is required");
   if (!subject) throw new Error("Subject is required");
   if (!html) throw new Error("Design HTML is empty — open the editor and add content");
-  if (!CATEGORIES.includes(category)) throw new Error("Invalid category");
+  if (!(MARKETING_TEMPLATE_CATEGORIES as readonly string[]).includes(category))
+    throw new Error("Invalid category");
 
   let parsedDesign: unknown;
   try {
@@ -126,4 +116,3 @@ export async function deleteMarketingTemplate(id: string) {
   redirect("/marketing/templates");
 }
 
-export const MARKETING_TEMPLATE_CATEGORIES = CATEGORIES;

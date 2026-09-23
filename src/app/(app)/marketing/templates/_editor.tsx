@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import dynamic from "next/dynamic";
 import { Card, Input, Label, Select, Textarea, Button, Badge } from "@/components/ui";
-import { saveMarketingTemplate, sendMarketingTestEmail, MARKETING_TEMPLATE_CATEGORIES } from "./actions";
+import { saveMarketingTemplate, sendMarketingTestEmail } from "./actions";
+import { MARKETING_TEMPLATE_CATEGORIES } from "./categories";
 
 // Unlayer must load client-side only; it renders an <iframe> that needs `window`.
 const EmailEditor = dynamic(() => import("react-email-editor"), { ssr: false }) as unknown as React.ComponentType<{
