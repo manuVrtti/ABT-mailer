@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { normalizeEmail } from "@/lib/utils";
 
-const LIST_COLORS = ["emerald", "teal", "sky", "amber", "rose", "violet", "slate"] as const;
+import { CONTACT_LIST_COLORS as LIST_COLORS } from "./_constants";
 
 const createListSchema = z.object({
   name: z.string().min(1).max(120),
@@ -114,4 +114,6 @@ export async function removeMember(listId: string, contactId: string) {
   revalidatePath(`/marketing/contacts/lists/${listId}`);
 }
 
-export const CONTACT_LIST_COLORS = LIST_COLORS;
+// CONTACT_LIST_COLORS is re-exported from ./_constants — do not re-export from
+// this "use server" module (Next.js server-action files may only export async
+// functions).
