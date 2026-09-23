@@ -1,8 +1,3 @@
-/**
- * Color helpers for the ContactList UI. Kept in a plain module (not the page
- * file) because Next.js pages may only export the default component plus its
- * blessed route-level exports.
- */
 export function listColorChip(color: string) {
   const c = color || "emerald";
   const map: Record<string, string> = {
