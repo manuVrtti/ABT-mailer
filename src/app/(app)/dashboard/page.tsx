@@ -31,7 +31,7 @@ const statusTone: Record<
   DRAFT: { badge: "muted", dot: "bg-slate-400" },
   SCHEDULED: { badge: "info", dot: "bg-blue-500" },
   QUEUED: { badge: "info", dot: "bg-blue-500" },
-  SENDING: { badge: "info", dot: "bg-indigo-500 animate-pulse" },
+  SENDING: { badge: "info", dot: "bg-emerald-500 animate-pulse" },
   PAUSED: { badge: "warning", dot: "bg-amber-500" },
   COMPLETED: { badge: "success", dot: "bg-emerald-500" },
   CANCELLED: { badge: "warning", dot: "bg-amber-500" },
@@ -138,7 +138,7 @@ export default async function DashboardPage() {
   const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   const stats = [
-    { label: "Total contacts", value: contactCount, icon: Users, gradient: "from-indigo-500 to-violet-500", surface: "bg-indigo-50 dark:bg-indigo-950/30", accent: "text-indigo-600 dark:text-indigo-300" },
+    { label: "Total contacts", value: contactCount, icon: Users, gradient: "from-emerald-500 to-teal-500", surface: "bg-emerald-50 dark:bg-emerald-950/30", accent: "text-emerald-600 dark:text-emerald-300" },
     { label: "Registered users", value: registeredCount, icon: UserCheck, gradient: "from-sky-500 to-cyan-500", surface: "bg-sky-50 dark:bg-sky-950/30", accent: "text-sky-600 dark:text-sky-300" },
     { label: "Prospects", value: Math.max(0, contactCount - registeredCount), icon: UserPlus, gradient: "from-amber-500 to-orange-500", surface: "bg-amber-50 dark:bg-amber-950/30", accent: "text-amber-600 dark:text-amber-300" },
     { label: "Emails sent", value: marketingSentAgg, icon: Send, gradient: "from-emerald-500 to-teal-500", surface: "bg-emerald-50 dark:bg-emerald-950/30", accent: "text-emerald-600 dark:text-emerald-300" },
@@ -146,13 +146,13 @@ export default async function DashboardPage() {
 
   const rates = [
     { label: "Delivery rate", value: `${deliveryRate.toFixed(1)}%`, icon: Truck, tone: "text-emerald-600" },
-    { label: "Click rate", value: `${clickRate.toFixed(2)}%`, icon: MousePointerClick, tone: "text-indigo-600" },
+    { label: "Click rate", value: `${clickRate.toFixed(2)}%`, icon: MousePointerClick, tone: "text-emerald-600" },
     { label: "Bounce rate", value: `${bounceRate.toFixed(2)}%`, icon: AlertTriangle, tone: "text-red-500" },
-    { label: "Registrations from email", value: conversionCount.toLocaleString(), icon: TrendingUp, tone: "text-violet-600" },
+    { label: "Registrations from email", value: conversionCount.toLocaleString(), icon: TrendingUp, tone: "text-teal-600" },
   ];
 
   const quickActions = [
-    { href: "/marketing/campaigns/new", title: "Create a campaign", desc: "Pick audience, template, send.", icon: Megaphone, surface: "bg-gradient-to-br from-indigo-50 to-violet-100 dark:from-indigo-950/40 dark:to-violet-950/30", accent: "text-indigo-700 dark:text-indigo-300" },
+    { href: "/marketing/campaigns/new", title: "Create a campaign", desc: "Pick audience, template, send.", icon: Megaphone, surface: "bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30", accent: "text-emerald-700 dark:text-emerald-300" },
     { href: "/marketing/contacts/import", title: "Import contacts", desc: "Upload a CSV of students.", icon: Upload, surface: "bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30", accent: "text-emerald-700 dark:text-emerald-300" },
     { href: "/marketing/segments/new", title: "Build a segment", desc: "Slice by college, year, branch.", icon: Filter, surface: "bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/40 dark:to-orange-950/30", accent: "text-amber-700 dark:text-amber-300" },
     { href: "/marketing/templates/new", title: "Design a template", desc: "Paste HTML or use the editor.", icon: Palette, surface: "bg-gradient-to-br from-rose-50 to-pink-100 dark:from-rose-950/40 dark:to-pink-950/30", accent: "text-rose-700 dark:text-rose-300" },
@@ -172,7 +172,7 @@ export default async function DashboardPage() {
         </div>
         <Link
           href="/marketing/campaigns/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:shadow-md"
+          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:shadow-md"
         >
           <Megaphone className="h-4 w-4" />
           New campaign
@@ -211,7 +211,7 @@ export default async function DashboardPage() {
           </div>
           <Link
             href="/marketing/contacts"
-            className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300"
+            className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300"
           >
             Go to contacts <ArrowRight className="h-3 w-3" />
           </Link>
@@ -236,7 +236,7 @@ export default async function DashboardPage() {
               <div className="text-[11px] text-muted-foreground">Delivered</div>
             </div>
             <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40">
-              <div className="text-lg font-semibold tabular-nums text-indigo-600 dark:text-indigo-300">
+              <div className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
                 {txnOpenedPct.toFixed(1)}%
               </div>
               <div className="text-[11px] text-muted-foreground">Opens</div>
@@ -285,14 +285,14 @@ export default async function DashboardPage() {
               <h2 className="text-lg font-semibold">Your last campaigns</h2>
               <p className="text-xs text-muted-foreground">Open, click, and conversion rates for your latest sends.</p>
             </div>
-            <Link href="/marketing/campaigns" className="text-xs font-medium text-indigo-600 hover:underline dark:text-indigo-300">
+            <Link href="/marketing/campaigns" className="text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300">
               Go to campaigns →
             </Link>
           </div>
           {recentCampaigns.length === 0 ? (
             <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-white p-10 text-center shadow-sm dark:bg-slate-900/40">
-              <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-100 dark:from-indigo-950/40 dark:to-violet-950/30">
-                <Megaphone className="h-7 w-7 text-indigo-500 dark:text-indigo-300" />
+              <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30">
+                <Megaphone className="h-7 w-7 text-emerald-500 dark:text-emerald-300" />
               </div>
               <div className="text-sm font-medium">No campaigns yet</div>
               <p className="mt-1 max-w-xs text-xs text-muted-foreground">
@@ -300,7 +300,7 @@ export default async function DashboardPage() {
               </p>
               <Link
                 href="/marketing/campaigns/new"
-                className="mt-4 inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-indigo-500 to-violet-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:shadow-md"
+                className="mt-4 inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:shadow-md"
               >
                 Create your first campaign
                 <ArrowRight className="h-3.5 w-3.5" />

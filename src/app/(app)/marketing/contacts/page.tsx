@@ -75,14 +75,14 @@ export default async function ContactsPage({
             name="q"
             defaultValue={q ?? ""}
             placeholder="Search by email…"
-            className="w-full rounded-lg border border-input bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900"
+            className="w-full rounded-lg border border-input bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900"
           />
         </div>
         <input
           name="college"
           defaultValue={college ?? ""}
           placeholder="Filter by college…"
-          className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900"
+          className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900"
         />
         <div />
       </form>

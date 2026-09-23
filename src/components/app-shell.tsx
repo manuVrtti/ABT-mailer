@@ -74,7 +74,7 @@ export function AppShell({
       <aside className="hidden w-64 shrink-0 flex-col border-r border-border/60 bg-white dark:bg-slate-900/50 md:flex">
         {/* Brand */}
         <div className="flex items-center gap-2 px-5 py-5">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-semibold text-white shadow-sm">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-semibold text-white shadow-sm">
             AB
           </div>
           <div>
@@ -106,7 +106,7 @@ export function AppShell({
                           className={cn(
                             "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition",
                             active
-                              ? "bg-gradient-to-r from-indigo-500 to-violet-600 font-medium text-white shadow-sm"
+                              ? "bg-gradient-to-r from-emerald-500 to-teal-600 font-medium text-white shadow-sm"
                               : "text-foreground/75 hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800/50",
                           )}
                         >

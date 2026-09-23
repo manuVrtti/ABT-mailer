@@ -7,8 +7,8 @@ export function Sparkline({
   data,
   width = 220,
   height = 60,
-  stroke = "#6366f1",
-  fill = "#6366f1",
+  stroke = "#10b981",
+  fill = "#10b981",
 }: {
   data: number[];
   width?: number;
