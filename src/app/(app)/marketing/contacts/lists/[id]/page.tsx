@@ -3,7 +3,7 @@ import { ListChecks, Users } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Card, Table, THead, TR, TH, TD, EmptyState, Button } from "@/components/ui";
 import { ContactsTabs } from "../../_tabs";
-import { listColorChip, listColorGradient } from "../page";
+import { listColorChip, listColorGradient } from "../_colors";
 import { DeleteListButton } from "./_delete-button";
 import { AddMembersPanel } from "./_add-members";
 import { RemoveMemberButton } from "./_remove-member";
