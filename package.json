@@ -30,6 +30,7 @@
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "jose": "^5.9.3",
+    "lucide-react": "^1.47.0",
     "next": "^14.2.13",
     "next-auth": "^4.24.8",
     "papaparse": "^5.4.1",

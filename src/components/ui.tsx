@@ -23,7 +23,11 @@ export function PageHeader({
 }
 
 export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("rounded-lg border border-border bg-card p-4", className)}>{children}</div>;
+  return (
+    <div className={cn("rounded-xl border border-border/60 bg-white p-4 shadow-sm dark:bg-slate-900/60", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function Button({
@@ -44,10 +48,11 @@ export function Button({
     "inline-flex items-center justify-center rounded-md font-medium transition disabled:opacity-60 disabled:pointer-events-none";
   const sizes = { sm: "px-2.5 py-1 text-xs", md: "px-4 py-2 text-sm" } as const;
   const variants = {
-    primary: "bg-primary text-primary-foreground hover:opacity-90",
-    secondary: "border border-border bg-background hover:bg-accent",
-    ghost: "hover:bg-accent",
-    destructive: "bg-destructive text-destructive-foreground hover:opacity-90",
+    primary:
+      "bg-gradient-to-r from-indigo-500 to-violet-600 text-white shadow-sm hover:shadow-md",
+    secondary: "border border-border bg-white hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800",
+    ghost: "hover:bg-slate-100 dark:hover:bg-slate-800",
+    destructive: "bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-sm hover:shadow-md",
   } as const;
   const classes = cn(base, sizes[size], variants[variant], className);
   if (as === "a" && href) {
@@ -133,15 +138,22 @@ export function EmptyState({
   title,
   description,
   action,
+  icon: Icon,
 }: {
   title: string;
   description?: string;
   action?: React.ReactNode;
+  icon?: React.ComponentType<{ className?: string }>;
 }) {
   return (
-    <div className="rounded-lg border border-dashed border-border bg-card p-10 text-center">
+    <div className="rounded-xl border border-dashed border-border/70 bg-white p-10 text-center shadow-sm dark:bg-slate-900/40">
+      {Icon && (
+        <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-indigo-50 to-violet-100 dark:from-indigo-950/40 dark:to-violet-950/30">
+          <Icon className="h-7 w-7 text-indigo-500 dark:text-indigo-300" />
+        </div>
+      )}
       <div className="text-sm font-medium">{title}</div>
-      {description && <p className="mx-auto mt-1 max-w-sm text-sm text-muted-foreground">{description}</p>}
+      {description && <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">{description}</p>}
       {action && <div className="mt-4">{action}</div>}
     </div>
   );
@@ -149,13 +161,17 @@ export function EmptyState({
 
 export function Table({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-card">
+    <div className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
       <table className="w-full text-sm">{children}</table>
     </div>
   );
 }
 export function THead({ children }: { children: React.ReactNode }) {
-  return <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">{children}</thead>;
+  return (
+    <thead className="bg-slate-50/80 text-[10px] uppercase tracking-wider text-muted-foreground dark:bg-slate-800/40">
+      {children}
+    </thead>
+  );
 }
 export function TR({ children, className }: { children: React.ReactNode; className?: string }) {
   return <tr className={cn("border-t border-border first:border-t-0", className)}>{children}</tr>;
