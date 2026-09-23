@@ -1,6 +1,7 @@
 import Link from "next/link";
+import { Users, Search, Upload, FolderClock } from "lucide-react";
 import { db } from "@/lib/db";
-import { PageHeader, Table, THead, TR, TH, TD, Badge, Button, EmptyState, Input } from "@/components/ui";
+import { PageHeader, Table, THead, TR, TH, TD, Badge, Button, EmptyState } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contacts" };
@@ -46,13 +47,21 @@ export default async function ContactsPage({
     <div>
       <PageHeader
         title="Contacts"
-        description={`${total.toLocaleString()} contact${total === 1 ? "" : "s"}. Non-registered prospects only — registered ABTalks users sync separately.`}
+        icon={Users}
+        description={
+          <>
+            <span className="font-semibold text-foreground">{total.toLocaleString()}</span>{" "}
+            contact{total === 1 ? "" : "s"}. Non-registered prospects only — registered ABTalks users sync separately.
+          </>
+        }
         actions={
           <>
             <Button as="a" href="/marketing/contacts/imports" variant="secondary">
+              <FolderClock className="mr-1 h-4 w-4" />
               Imports
             </Button>
             <Button as="a" href="/marketing/contacts/import">
+              <Upload className="mr-1 h-4 w-4" />
               Import CSV
             </Button>
           </>
@@ -60,16 +69,35 @@ export default async function ContactsPage({
       />
 
       <form className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-3">
-        <Input name="q" placeholder="Search by email…" defaultValue={q ?? ""} />
-        <Input name="college" placeholder="Filter by college…" defaultValue={college ?? ""} />
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            name="q"
+            defaultValue={q ?? ""}
+            placeholder="Search by email…"
+            className="w-full rounded-lg border border-input bg-white py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900"
+          />
+        </div>
+        <input
+          name="college"
+          defaultValue={college ?? ""}
+          placeholder="Filter by college…"
+          className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-400 dark:bg-slate-900"
+        />
         <div />
       </form>
 
       {contacts.length === 0 ? (
         <EmptyState
+          icon={Users}
           title="No contacts yet"
           description="Upload a CSV to bring in students, or add one manually."
-          action={<Button as="a" href="/marketing/contacts/import">Import CSV</Button>}
+          action={
+            <Button as="a" href="/marketing/contacts/import">
+              <Upload className="mr-1 h-4 w-4" />
+              Import CSV
+            </Button>
+          }
         />
       ) : (
         <>
@@ -88,8 +116,10 @@ export default async function ContactsPage({
             <tbody>
               {contacts.map((c) => (
                 <TR key={c.id}>
-                  <TD>{c.email}</TD>
-                  <TD>{[c.firstName, c.lastName].filter(Boolean).join(" ") || "—"}</TD>
+                  <TD className="font-medium">{c.email}</TD>
+                  <TD className="text-muted-foreground">
+                    {[c.firstName, c.lastName].filter(Boolean).join(" ") || "—"}
+                  </TD>
                   <TD>{c.college ?? "—"}</TD>
                   <TD>{c.branch ?? "—"}</TD>
                   <TD>{c.year ?? "—"}</TD>
@@ -114,18 +144,18 @@ export default async function ContactsPage({
             <div className="flex gap-2">
               {page > 1 && (
                 <Link
-                  className="underline underline-offset-4"
+                  className="rounded-md border border-border bg-white px-2.5 py-1 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800"
                   href={{ pathname: "/marketing/contacts", query: { ...searchParams, page: page - 1 } }}
                 >
-                  Prev
+                  ← Prev
                 </Link>
               )}
               {page < totalPages && (
                 <Link
-                  className="underline underline-offset-4"
+                  className="rounded-md border border-border bg-white px-2.5 py-1 hover:bg-slate-50 dark:bg-slate-900 dark:hover:bg-slate-800"
                   href={{ pathname: "/marketing/contacts", query: { ...searchParams, page: page + 1 } }}
                 >
-                  Next
+                  Next →
                 </Link>
               )}
             </div>
