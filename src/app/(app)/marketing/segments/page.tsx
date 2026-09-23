@@ -31,7 +31,7 @@ export default async function SegmentsPage() {
               href={`/marketing/segments/${s.id}`}
               className="group flex items-center gap-4 rounded-xl border border-border/60 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900/60"
             >
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-indigo-50 to-violet-100 text-indigo-600 dark:from-indigo-950/40 dark:to-violet-950/30 dark:text-indigo-300">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-emerald-50 to-teal-100 text-emerald-600 dark:from-emerald-950/40 dark:to-teal-950/30 dark:text-emerald-300">
                 <Users2 className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">

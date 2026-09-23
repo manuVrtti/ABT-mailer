@@ -12,13 +12,13 @@ export default async function LoginPage({ searchParams }: { searchParams: { next
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 p-4 dark:bg-slate-950">
       {/* Ambient background gradient */}
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 left-1/4 h-96 w-96 rounded-full bg-indigo-300/30 blur-3xl dark:bg-indigo-700/20" />
-        <div className="absolute -bottom-24 right-1/4 h-96 w-96 rounded-full bg-violet-300/30 blur-3xl dark:bg-violet-700/20" />
+        <div className="absolute -top-24 left-1/4 h-96 w-96 rounded-full bg-emerald-300/30 blur-3xl dark:bg-emerald-700/20" />
+        <div className="absolute -bottom-24 right-1/4 h-96 w-96 rounded-full bg-teal-300/30 blur-3xl dark:bg-teal-700/20" />
       </div>
 
       <div className="relative w-full max-w-sm rounded-2xl border border-border/60 bg-white p-8 shadow-xl dark:bg-slate-900">
         <div className="mb-6 flex items-center gap-3">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-sm font-semibold text-white shadow-sm">
+          <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-semibold text-white shadow-sm">
             AB
           </div>
           <div>

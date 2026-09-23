@@ -53,9 +53,9 @@ export default async function TransactionalRealtimePage() {
   const peakPerMinute = Math.max(...perMinute, 0);
 
   const tiles = [
-    { label: "Events", value: eventsTotal, icon: Activity, tone: "text-indigo-600", surface: "bg-indigo-50 dark:bg-indigo-950/30" },
+    { label: "Events", value: eventsTotal, icon: Activity, tone: "text-emerald-600", surface: "bg-emerald-50 dark:bg-emerald-950/30" },
     { label: "Delivered", value: delivered, icon: Truck, tone: "text-emerald-600", surface: "bg-emerald-50 dark:bg-emerald-950/30" },
-    { label: "Opens", value: opened, icon: MailOpen, tone: "text-violet-600", surface: "bg-violet-50 dark:bg-violet-950/30" },
+    { label: "Opens", value: opened, icon: MailOpen, tone: "text-teal-600", surface: "bg-teal-50 dark:bg-teal-950/30" },
     { label: "Clicks", value: clicked, icon: MousePointerClick, tone: "text-sky-600", surface: "bg-sky-50 dark:bg-sky-950/30" },
     { label: "Bounced", value: bounced, icon: AlertTriangle, tone: "text-rose-600", surface: "bg-rose-50 dark:bg-rose-950/30" },
   ];
@@ -119,12 +119,12 @@ export default async function TransactionalRealtimePage() {
                 Delivery, opens, clicks, bounces, complaints combined.
               </div>
             </div>
-            <div className="grid h-9 w-9 place-items-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-950/30 dark:text-indigo-300">
+            <div className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
               <Activity className="h-5 w-5" />
             </div>
           </div>
           <div className="mt-4">
-            <Sparkline data={eventsPerMinute} width={520} height={100} stroke="#6366f1" fill="#6366f1" />
+            <Sparkline data={eventsPerMinute} width={520} height={100} stroke="#10b981" fill="#10b981" />
           </div>
           <div className="mt-2 flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
             <span>{WINDOW_MIN} min ago</span>

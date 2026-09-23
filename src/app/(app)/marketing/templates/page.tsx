@@ -8,14 +8,14 @@ export const metadata = { title: "Marketing templates" };
 
 // Rotating soft-gradient tiles for template cards so they don't all look the same.
 const TILE_GRADIENTS = [
-  "from-indigo-50 to-violet-100 dark:from-indigo-950/40 dark:to-violet-950/30",
+  "from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30",
   "from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30",
   "from-amber-50 to-orange-100 dark:from-amber-950/40 dark:to-orange-950/30",
   "from-rose-50 to-pink-100 dark:from-rose-950/40 dark:to-pink-950/30",
   "from-sky-50 to-cyan-100 dark:from-sky-950/40 dark:to-cyan-950/30",
 ];
 const TILE_ACCENTS = [
-  "text-indigo-600 dark:text-indigo-300",
+  "text-emerald-600 dark:text-emerald-300",
   "text-emerald-600 dark:text-emerald-300",
   "text-amber-600 dark:text-amber-300",
   "text-rose-600 dark:text-rose-300",

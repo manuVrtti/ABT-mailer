@@ -14,7 +14,7 @@ const statusTone: Record<
   DRAFT: { badge: "muted", dot: "bg-slate-400" },
   SCHEDULED: { badge: "info", dot: "bg-blue-500" },
   QUEUED: { badge: "info", dot: "bg-blue-500" },
-  SENDING: { badge: "info", dot: "bg-indigo-500 animate-pulse" },
+  SENDING: { badge: "info", dot: "bg-emerald-500 animate-pulse" },
   PAUSED: { badge: "warning", dot: "bg-amber-500" },
   COMPLETED: { badge: "success", dot: "bg-emerald-500" },
   CANCELLED: { badge: "warning", dot: "bg-amber-500" },
