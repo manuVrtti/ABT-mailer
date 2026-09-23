@@ -4,25 +4,36 @@ import { requireUser } from "@/lib/auth/session";
 import { AppShell, type NavCounts } from "@/components/app-shell";
 
 async function getNavCounts(): Promise<NavCounts> {
-  const [campaigns, campaignsSending, contacts, segments, templates, transactionalTemplates, eventRules, deliveryLogs] =
-    await Promise.all([
-      db.campaign.count(),
-      db.campaign.count({
-        where: {
-          status: { in: [CampaignStatus.SENDING, CampaignStatus.SCHEDULED, CampaignStatus.QUEUED] },
-        },
-      }),
-      db.marketingContact.count(),
-      db.segment.count(),
-      db.emailTemplate.count(),
-      db.transactionalTemplate.count({ where: { isActive: true } }),
-      db.emailEventRule.count({ where: { isActive: true } }),
-      db.emailJob.count(),
-    ]);
+  const [
+    campaigns,
+    campaignsSending,
+    contacts,
+    lists,
+    segments,
+    templates,
+    transactionalTemplates,
+    eventRules,
+    deliveryLogs,
+  ] = await Promise.all([
+    db.campaign.count(),
+    db.campaign.count({
+      where: {
+        status: { in: [CampaignStatus.SENDING, CampaignStatus.SCHEDULED, CampaignStatus.QUEUED] },
+      },
+    }),
+    db.marketingContact.count(),
+    db.contactList.count(),
+    db.segment.count(),
+    db.emailTemplate.count(),
+    db.transactionalTemplate.count({ where: { isActive: true } }),
+    db.emailEventRule.count({ where: { isActive: true } }),
+    db.emailJob.count(),
+  ]);
   return {
     campaigns,
     campaignsSending,
     contacts,
+    lists,
     segments,
     templates,
     transactionalTemplates,

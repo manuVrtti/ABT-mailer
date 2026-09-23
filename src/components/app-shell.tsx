@@ -36,6 +36,7 @@ export type NavCounts = {
   campaigns: number;
   campaignsSending: number;
   contacts: number;
+  lists: number;
   segments: number;
   templates: number;
   transactionalTemplates: number;
