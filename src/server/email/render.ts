@@ -67,22 +67,79 @@ export function renderTemplate(
 }
 
 /**
- * HTML sanitizer used for personalized email bodies. Lazy-loaded via Node's
- * createRequire so tests that only exercise substitution don't pay the
- * DOMPurify CSS-parser import cost.
+ * HTML sanitizer used for personalized email bodies. Uses `sanitize-html`
+ * (pure CJS, no ESM CSS-parser transitive dep) so it works cleanly in
+ * Vercel's Node 20 runtime. Was previously DOMPurify, which pulled in
+ * `@csstools/css-calc` (ESM-only) and broke at runtime.
  */
-import { createRequire } from "node:module";
-type Sanitizer = { sanitize: (dirty: string, opts?: unknown) => string };
-let sanitizerCache: Sanitizer | undefined;
+import sanitize from "sanitize-html";
+
+const SANITIZE_OPTIONS: sanitize.IOptions = {
+  allowedTags: sanitize.defaults.allowedTags.concat([
+    "img",
+    "h1",
+    "h2",
+    "style",
+    "font",
+    "center",
+    "hr",
+  ]),
+  allowedAttributes: {
+    ...sanitize.defaults.allowedAttributes,
+    "*": ["style", "class", "id", "align", "valign", "width", "height", "bgcolor", "border", "cellpadding", "cellspacing"],
+    a: ["href", "name", "target", "rel", "style", "class"],
+    img: ["src", "srcset", "alt", "title", "width", "height", "style", "class"],
+    table: ["style", "class", "border", "cellpadding", "cellspacing", "align", "bgcolor", "width"],
+    td: ["style", "class", "align", "valign", "width", "height", "bgcolor", "colspan", "rowspan"],
+    th: ["style", "class", "align", "valign", "width", "height", "bgcolor", "colspan", "rowspan"],
+  },
+  // Allow inline styles — email HTML lives on inline CSS.
+  allowedStyles: {
+    "*": {
+      color: [/.*/],
+      "background-color": [/.*/],
+      "background": [/.*/],
+      "font-family": [/.*/],
+      "font-size": [/.*/],
+      "font-weight": [/.*/],
+      "font-style": [/.*/],
+      "text-align": [/.*/],
+      "text-decoration": [/.*/],
+      "line-height": [/.*/],
+      padding: [/.*/],
+      "padding-top": [/.*/],
+      "padding-right": [/.*/],
+      "padding-bottom": [/.*/],
+      "padding-left": [/.*/],
+      margin: [/.*/],
+      "margin-top": [/.*/],
+      "margin-right": [/.*/],
+      "margin-bottom": [/.*/],
+      "margin-left": [/.*/],
+      border: [/.*/],
+      "border-top": [/.*/],
+      "border-right": [/.*/],
+      "border-bottom": [/.*/],
+      "border-left": [/.*/],
+      "border-radius": [/.*/],
+      "border-collapse": [/.*/],
+      width: [/.*/],
+      "max-width": [/.*/],
+      "min-width": [/.*/],
+      height: [/.*/],
+      "max-height": [/.*/],
+      "min-height": [/.*/],
+      display: [/.*/],
+      "vertical-align": [/.*/],
+    },
+  },
+  allowedSchemes: ["http", "https", "mailto", "tel"],
+  allowedSchemesByTag: { img: ["http", "https", "data"] },
+  allowProtocolRelative: false,
+};
+
 export function sanitizeHtml(html: string): string {
-  if (!sanitizerCache) {
-    const req = createRequire(import.meta.url);
-    sanitizerCache = req("isomorphic-dompurify") as Sanitizer;
-  }
-  return sanitizerCache.sanitize(html, {
-    USE_PROFILES: { html: true },
-    ADD_ATTR: ["target", "rel"],
-  });
+  return sanitize(html, SANITIZE_OPTIONS);
 }
 
 /** Extract the set of variable names referenced in a template body. */
