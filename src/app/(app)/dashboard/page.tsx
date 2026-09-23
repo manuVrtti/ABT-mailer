@@ -10,16 +10,14 @@ import {
   Palette,
   ArrowRight,
   Mail,
-  Truck,
-  MousePointerClick,
-  TrendingUp,
-  AlertTriangle,
 } from "lucide-react";
 import { db } from "@/lib/db";
 import { CampaignStatus, EmailJobStatus, EmailType } from "@prisma/client";
 import { requireUser } from "@/lib/auth/session";
 import { Badge } from "@/components/ui";
 import { Sparkline } from "@/components/sparkline";
+import { MetricBar } from "@/components/metric-bar";
+import { LineChart, type LineSeries } from "@/components/line-chart";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard" };
@@ -38,7 +36,6 @@ const statusTone: Record<
   FAILED: { badge: "destructive", dot: "bg-red-500" },
 };
 
-/** Group contact created_at into a 30-day count array (oldest → newest). */
 async function contactsPerDay30d(): Promise<number[]> {
   const days = 30;
   const since = new Date();
@@ -56,6 +53,53 @@ async function contactsPerDay30d(): Promise<number[]> {
   return buckets;
 }
 
+/** Per-day sent / delivered / opened / clicked over the last 14 days. */
+async function activitySeries14d(): Promise<{
+  sent: number[];
+  delivered: number[];
+  opened: number[];
+  clicked: number[];
+  labels: string[];
+}> {
+  const days = 14;
+  const since = new Date();
+  since.setDate(since.getDate() - (days - 1));
+  since.setHours(0, 0, 0, 0);
+  const sinceMs = since.getTime();
+  const [jobs, events] = await Promise.all([
+    db.emailJob.findMany({
+      where: { createdAt: { gte: since } },
+      select: { sentAt: true },
+    }),
+    db.emailEvent.findMany({
+      where: { createdAt: { gte: since } },
+      select: { createdAt: true, type: true },
+    }),
+  ]);
+  const bucket = () => new Array<number>(days).fill(0);
+  const sent = bucket();
+  const delivered = bucket();
+  const opened = bucket();
+  const clicked = bucket();
+  for (const j of jobs) {
+    if (!j.sentAt) continue;
+    const idx = Math.floor((j.sentAt.getTime() - sinceMs) / 86_400_000);
+    if (idx >= 0 && idx < days) sent[idx] = (sent[idx] ?? 0) + 1;
+  }
+  for (const e of events) {
+    const idx = Math.floor((e.createdAt.getTime() - sinceMs) / 86_400_000);
+    if (idx < 0 || idx >= days) continue;
+    if (e.type === "DELIVERY") delivered[idx] = (delivered[idx] ?? 0) + 1;
+    if (e.type === "OPEN") opened[idx] = (opened[idx] ?? 0) + 1;
+    if (e.type === "CLICK") clicked[idx] = (clicked[idx] ?? 0) + 1;
+  }
+  const labels = Array.from({ length: days }, (_, i) => {
+    const d = new Date(sinceMs + i * 86_400_000);
+    return `${d.getDate()}/${d.getMonth() + 1}`;
+  });
+  return { sent, delivered, opened, clicked, labels };
+}
+
 export default async function DashboardPage() {
   const user = await requireUser();
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
@@ -67,6 +111,7 @@ export default async function DashboardPage() {
     marketingSentAgg,
     marketingDeliveredAgg,
     marketingClickedAgg,
+    marketingOpenedAgg,
     marketingBouncedAgg,
     recentCampaigns,
     conversionCount,
@@ -77,6 +122,7 @@ export default async function DashboardPage() {
     txnBounced7d,
     txnFailed7d,
     txnOpened7d,
+    activity,
   ] = await Promise.all([
     db.marketingContact.count(),
     db.registeredUserRef.count(),
@@ -85,6 +131,7 @@ export default async function DashboardPage() {
     }),
     db.campaign.aggregate({ _sum: { deliveredCount: true } }),
     db.campaign.aggregate({ _sum: { clickedCount: true } }),
+    db.campaign.aggregate({ _sum: { openedCount: true } }),
     db.campaign.aggregate({ _sum: { bouncedCount: true } }),
     db.campaign.findMany({
       orderBy: { updatedAt: "desc" },
@@ -119,12 +166,15 @@ export default async function DashboardPage() {
     db.emailJob.count({
       where: { emailType: EmailType.TRANSACTIONAL, sentAt: { gte: sevenDaysAgo } },
     }),
+    activitySeries14d(),
   ]);
 
   const delivered = marketingDeliveredAgg._sum.deliveredCount ?? 0;
+  const opened = marketingOpenedAgg._sum.openedCount ?? 0;
   const clicked = marketingClickedAgg._sum.clickedCount ?? 0;
   const bounced = marketingBouncedAgg._sum.bouncedCount ?? 0;
   const deliveryRate = marketingSentAgg > 0 ? (delivered / marketingSentAgg) * 100 : 0;
+  const openRate = delivered > 0 ? (opened / delivered) * 100 : 0;
   const clickRate = delivered > 0 ? (clicked / delivered) * 100 : 0;
   const bounceRate = marketingSentAgg > 0 ? (bounced / marketingSentAgg) * 100 : 0;
 
@@ -141,21 +191,21 @@ export default async function DashboardPage() {
     { label: "Total contacts", value: contactCount, icon: Users, gradient: "from-emerald-500 to-teal-500", surface: "bg-emerald-50 dark:bg-emerald-950/30", accent: "text-emerald-600 dark:text-emerald-300" },
     { label: "Registered users", value: registeredCount, icon: UserCheck, gradient: "from-sky-500 to-cyan-500", surface: "bg-sky-50 dark:bg-sky-950/30", accent: "text-sky-600 dark:text-sky-300" },
     { label: "Prospects", value: Math.max(0, contactCount - registeredCount), icon: UserPlus, gradient: "from-amber-500 to-orange-500", surface: "bg-amber-50 dark:bg-amber-950/30", accent: "text-amber-600 dark:text-amber-300" },
-    { label: "Emails sent", value: marketingSentAgg, icon: Send, gradient: "from-emerald-500 to-teal-500", surface: "bg-emerald-50 dark:bg-emerald-950/30", accent: "text-emerald-600 dark:text-emerald-300" },
-  ];
-
-  const rates = [
-    { label: "Delivery rate", value: `${deliveryRate.toFixed(1)}%`, icon: Truck, tone: "text-emerald-600" },
-    { label: "Click rate", value: `${clickRate.toFixed(2)}%`, icon: MousePointerClick, tone: "text-emerald-600" },
-    { label: "Bounce rate", value: `${bounceRate.toFixed(2)}%`, icon: AlertTriangle, tone: "text-red-500" },
-    { label: "Registrations from email", value: conversionCount.toLocaleString(), icon: TrendingUp, tone: "text-teal-600" },
+    { label: "Emails sent", value: marketingSentAgg, icon: Send, gradient: "from-rose-500 to-pink-500", surface: "bg-rose-50 dark:bg-rose-950/30", accent: "text-rose-600 dark:text-rose-300" },
   ];
 
   const quickActions = [
     { href: "/marketing/campaigns/new", title: "Create a campaign", desc: "Pick audience, template, send.", icon: Megaphone, surface: "bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30", accent: "text-emerald-700 dark:text-emerald-300" },
-    { href: "/marketing/contacts/import", title: "Import contacts", desc: "Upload a CSV of students.", icon: Upload, surface: "bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30", accent: "text-emerald-700 dark:text-emerald-300" },
+    { href: "/marketing/contacts/import", title: "Import contacts", desc: "Upload a CSV of students.", icon: Upload, surface: "bg-gradient-to-br from-sky-50 to-cyan-100 dark:from-sky-950/40 dark:to-cyan-950/30", accent: "text-sky-700 dark:text-sky-300" },
     { href: "/marketing/segments/new", title: "Build a segment", desc: "Slice by college, year, branch.", icon: Filter, surface: "bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/40 dark:to-orange-950/30", accent: "text-amber-700 dark:text-amber-300" },
     { href: "/marketing/templates/new", title: "Design a template", desc: "Paste HTML or use the editor.", icon: Palette, surface: "bg-gradient-to-br from-rose-50 to-pink-100 dark:from-rose-950/40 dark:to-pink-950/30", accent: "text-rose-700 dark:text-rose-300" },
+  ];
+
+  const linesSeries: LineSeries[] = [
+    { label: "Sent", color: "#10b981", data: activity.sent },
+    { label: "Delivered", color: "#14b8a6", data: activity.delivered },
+    { label: "Opened", color: "#f59e0b", data: activity.opened },
+    { label: "Clicked", color: "#f43f5e", data: activity.clicked },
   ];
 
   return (
@@ -184,13 +234,13 @@ export default async function DashboardPage() {
         {stats.map((s) => {
           const Icon = s.icon;
           return (
-            <div key={s.label} className="group relative overflow-hidden rounded-xl border border-border/60 bg-white p-5 shadow-sm transition hover:shadow-md dark:bg-slate-900/60">
+            <div key={s.label} className="group relative overflow-hidden rounded-2xl border border-border/60 bg-white p-5 shadow-sm transition hover:shadow-md dark:bg-slate-900/60">
               <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${s.gradient} opacity-10 blur-xl transition group-hover:opacity-20`} />
               <div className="relative">
-                <div className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${s.surface}`}>
+                <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${s.surface}`}>
                   <Icon className={`h-5 w-5 ${s.accent}`} />
                 </div>
-                <div className="mt-4 text-2xl font-semibold tabular-nums">{s.value.toLocaleString()}</div>
+                <div className="mt-4 text-3xl font-semibold tracking-tight tabular-nums">{s.value.toLocaleString()}</div>
                 <div className="text-xs text-muted-foreground">{s.label}</div>
               </div>
             </div>
@@ -198,16 +248,46 @@ export default async function DashboardPage() {
         })}
       </div>
 
-      {/* Contacts trend + Transactional activity — Brevo-style two-up */}
+      {/* HERO: total marketing sent + progress bars + line chart */}
+      <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm dark:bg-slate-900/60">
+        <div className="flex flex-wrap items-start justify-between gap-6">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Marketing activity</div>
+            <div className="mt-1 flex items-baseline gap-3">
+              <div className="text-5xl font-semibold tabular-nums">{marketingSentAgg.toLocaleString()}</div>
+              <div className="text-sm text-muted-foreground">emails sent · last 14 days</div>
+            </div>
+          </div>
+          <Link
+            href="/marketing/analytics"
+            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300"
+          >
+            Explain these metrics <ArrowRight className="h-3 w-3" />
+          </Link>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2 lg:grid-cols-4">
+          <MetricBar label="Delivery rate" value={`${deliveryRate.toFixed(2)}%`} percent={deliveryRate} tone="emerald" />
+          <MetricBar label="Open rate" value={`${openRate.toFixed(2)}%`} percent={openRate} tone="teal" />
+          <MetricBar label="Click rate" value={`${clickRate.toFixed(2)}%`} percent={clickRate} tone="amber" />
+          <MetricBar label="Bounce rate" value={`${bounceRate.toFixed(2)}%`} percent={bounceRate} tone="red" />
+        </div>
+
+        <div className="mt-8">
+          <LineChart series={linesSeries} height={200} xLabels={activity.labels} />
+        </div>
+      </div>
+
+      {/* Contacts trend + Transactional activity */}
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+        <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm dark:bg-slate-900/60">
           <div className="flex items-start justify-between gap-4">
             <div>
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">New contacts</div>
-              <div className="mt-1 text-2xl font-semibold tabular-nums">{newContacts30d.toLocaleString()}</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">New contacts</div>
+              <div className="mt-1 text-3xl font-semibold tabular-nums">{newContacts30d.toLocaleString()}</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">Over the last 30 days</div>
             </div>
-            <Sparkline data={contactsSeries} width={220} height={60} />
+            <Sparkline data={contactsSeries} width={200} height={60} />
           </div>
           <Link
             href="/marketing/contacts"
@@ -217,67 +297,27 @@ export default async function DashboardPage() {
           </Link>
         </div>
 
-        <div className="rounded-xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+        <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm dark:bg-slate-900/60">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Transactional activity</div>
-              <div className="mt-1 text-2xl font-semibold tabular-nums">{txn7d.toLocaleString()}</div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Transactional activity</div>
+              <div className="mt-1 text-3xl font-semibold tabular-nums">{txn7d.toLocaleString()}</div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">Emails triggered in last 7 days</div>
             </div>
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
+            <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
               <Mail className="h-5 w-5" />
             </div>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
-            <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40">
-              <div className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
-                {txnDeliveredPct.toFixed(1)}%
-              </div>
-              <div className="text-[11px] text-muted-foreground">Delivered</div>
-            </div>
-            <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40">
-              <div className="text-lg font-semibold tabular-nums text-emerald-600 dark:text-emerald-300">
-                {txnOpenedPct.toFixed(1)}%
-              </div>
-              <div className="text-[11px] text-muted-foreground">Opens</div>
-            </div>
-            <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40">
-              <div className="text-lg font-semibold tabular-nums text-rose-600 dark:text-rose-300">
-                {txnBouncedPct.toFixed(1)}%
-              </div>
-              <div className="text-[11px] text-muted-foreground">Hard bounced</div>
-            </div>
-            <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/40">
-              <div className="text-lg font-semibold tabular-nums text-amber-600 dark:text-amber-300">
-                {txnFailedPct.toFixed(1)}%
-              </div>
-              <div className="text-[11px] text-muted-foreground">Failed</div>
-            </div>
+          <div className="mt-5 space-y-4">
+            <MetricBar label="Delivered" value={`${txnDeliveredPct.toFixed(1)}%`} percent={txnDeliveredPct} tone="emerald" />
+            <MetricBar label="Opens" value={`${txnOpenedPct.toFixed(1)}%`} percent={txnOpenedPct} tone="teal" />
+            <MetricBar label="Hard bounced" value={`${txnBouncedPct.toFixed(1)}%`} percent={txnBouncedPct} tone="rose" />
+            <MetricBar label="Failed" value={`${txnFailedPct.toFixed(1)}%`} percent={txnFailedPct} tone="amber" />
           </div>
         </div>
       </div>
 
-      {/* Rates strip */}
-      <div className="rounded-xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
-        <div className="grid grid-cols-2 divide-x divide-border/60 md:grid-cols-4">
-          {rates.map((r) => {
-            const Icon = r.icon;
-            return (
-              <div key={r.label} className="flex items-center gap-3 p-4">
-                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-slate-50 dark:bg-slate-800/60">
-                  <Icon className={`h-5 w-5 ${r.tone}`} />
-                </div>
-                <div className="min-w-0">
-                  <div className="text-lg font-semibold tabular-nums">{r.value}</div>
-                  <div className="truncate text-[11px] text-muted-foreground">{r.label}</div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Recent campaigns (Brevo-style per-campaign metrics) + Quick actions */}
+      {/* Recent campaigns + Quick actions */}
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <div className="mb-3 flex items-end justify-between">
@@ -290,7 +330,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           {recentCampaigns.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/70 bg-white p-10 text-center shadow-sm dark:bg-slate-900/40">
+            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-white p-10 text-center shadow-sm dark:bg-slate-900/40">
               <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30">
                 <Megaphone className="h-7 w-7 text-emerald-500 dark:text-emerald-300" />
               </div>
@@ -307,23 +347,23 @@ export default async function DashboardPage() {
               </Link>
             </div>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+            <div className="overflow-hidden rounded-2xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
               <ul className="divide-y divide-border/60">
                 {recentCampaigns.map((c) => {
                   const tone = statusTone[c.status];
-                  const openRate = c.deliveredCount > 0 ? (c.openedCount / c.deliveredCount) * 100 : 0;
+                  const openRateC = c.deliveredCount > 0 ? (c.openedCount / c.deliveredCount) * 100 : 0;
                   const clickRateC = c.deliveredCount > 0 ? (c.clickedCount / c.deliveredCount) * 100 : 0;
                   const when = c.completedAt ?? c.startedAt;
                   return (
                     <li key={c.id}>
                       <Link
                         href={`/marketing/campaigns/${c.id}`}
-                        className="grid grid-cols-6 items-center gap-3 px-4 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                        className="grid grid-cols-6 items-center gap-3 px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
                       >
                         <div className="col-span-6 sm:col-span-3">
                           <div className="truncate text-sm font-medium">{c.name}</div>
                           <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                            <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-0.5`}>
+                            <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5">
                               <span className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`} />
                               {c.status}
                             </span>
@@ -333,7 +373,7 @@ export default async function DashboardPage() {
                         </div>
                         <div className="text-center sm:text-right">
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Open rate</div>
-                          <div className="text-base font-semibold tabular-nums">{openRate.toFixed(2)}%</div>
+                          <div className="text-base font-semibold tabular-nums">{openRateC.toFixed(2)}%</div>
                         </div>
                         <div className="text-center sm:text-right">
                           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Click rate</div>
@@ -366,9 +406,9 @@ export default async function DashboardPage() {
                 <Link
                   key={q.href}
                   href={q.href}
-                  className={`group flex items-center gap-3 rounded-xl border border-border/60 p-3 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${q.surface}`}
+                  className={`group flex items-center gap-3 rounded-2xl border border-border/60 p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${q.surface}`}
                 >
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-white/70 dark:bg-slate-900/50">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/70 dark:bg-slate-900/50">
                     <Icon className={`h-5 w-5 ${q.accent}`} />
                   </div>
                   <div className="min-w-0 flex-1">
@@ -380,6 +420,23 @@ export default async function DashboardPage() {
               );
             })}
           </div>
+        </div>
+      </div>
+
+      {/* Registrations attribution row */}
+      <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Registrations from email</div>
+            <div className="mt-1 text-3xl font-semibold tabular-nums">{conversionCount.toLocaleString()}</div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">Attributed to a marketing campaign via UTM.</div>
+          </div>
+          <Link
+            href="/marketing/analytics"
+            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300"
+          >
+            View analytics <ArrowRight className="h-3 w-3" />
+          </Link>
         </div>
       </div>
     </div>

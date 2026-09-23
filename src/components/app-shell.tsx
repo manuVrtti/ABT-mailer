@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@prisma/client";
+import { TopBar } from "./top-bar";
 
 type NavItem = {
   href: string;
@@ -73,8 +74,8 @@ export function AppShell({
     <div className="flex min-h-screen bg-slate-50 dark:bg-slate-950">
       <aside className="hidden w-64 shrink-0 flex-col border-r border-border/60 bg-white dark:bg-slate-900/50 md:flex">
         {/* Brand */}
-        <div className="flex items-center gap-2 px-5 py-5">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-semibold text-white shadow-sm">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-sm font-semibold text-white shadow-sm">
             AB
           </div>
           <div>
@@ -84,18 +85,18 @@ export function AppShell({
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 space-y-5 px-3 pb-4">
+        <nav className="flex-1 space-y-6 px-3 pb-4">
           {groupsInOrder.map((g) => {
             const items = NAV.filter((n) => n.group === g);
             if (items.length === 0) return null;
             return (
               <div key={g}>
                 {GROUP_LABEL[g] && (
-                  <div className="mb-1.5 px-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                  <div className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
                     {GROUP_LABEL[g]}
                   </div>
                 )}
-                <ul className="space-y-0.5">
+                <ul className="space-y-1">
                   {items.map((item) => {
                     const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
                     const Icon = item.icon;
@@ -104,7 +105,7 @@ export function AppShell({
                         <Link
                           href={item.href}
                           className={cn(
-                            "group flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition",
+                            "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
                             active
                               ? "bg-gradient-to-r from-emerald-500 to-teal-600 font-medium text-white shadow-sm"
                               : "text-foreground/75 hover:bg-slate-100 hover:text-foreground dark:hover:bg-slate-800/50",
@@ -112,7 +113,7 @@ export function AppShell({
                         >
                           <Icon
                             className={cn(
-                              "h-4 w-4 shrink-0 transition",
+                              "h-5 w-5 shrink-0 transition",
                               active ? "text-white" : "text-muted-foreground group-hover:text-foreground",
                             )}
                           />
@@ -129,7 +130,7 @@ export function AppShell({
 
         {/* User */}
         <div className="border-t border-border/60 p-3">
-          <div className="flex items-center gap-3 rounded-lg bg-slate-50 p-2.5 dark:bg-slate-800/40">
+          <div className="flex items-center gap-3 rounded-xl bg-slate-50 p-2.5 dark:bg-slate-800/40">
             <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-xs font-semibold text-white">
               {initials}
             </div>
@@ -149,9 +150,12 @@ export function AppShell({
         </div>
       </aside>
 
-      <main className="flex-1">
-        <div className="container max-w-6xl py-8">{children}</div>
-      </main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopBar workspace={user.name ?? "ABTalks"} planLabel="Sandbox" />
+        <main className="flex-1">
+          <div className="container max-w-6xl px-6 py-8">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }
