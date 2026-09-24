@@ -50,8 +50,10 @@ export async function enqueueDelivery(jobId: string): Promise<{ queued: boolean;
     retries: 3,
     delay: delaySeconds,
     // Deduplicate at the queue layer too — belt and braces alongside the
-    // EmailJob.idempotencyKey unique constraint in the DB.
-    deduplicationId: `deliver:${jobId}`,
+    // EmailJob.idempotencyKey unique constraint in the DB. Colons are
+    // rejected by QStash ("DeduplicationId cannot contain ':'"), so use
+    // an underscore delimiter.
+    deduplicationId: `deliver_${jobId}`,
   });
 
   await db.emailJob.update({ where: { id: jobId }, data: { queuedAt: new Date() } });
@@ -78,6 +80,6 @@ export async function enqueueImportChunk(payload: {
     url,
     body: payload,
     retries: 3,
-    deduplicationId: `import:${payload.importJobId}:${payload.offset}`,
+    deduplicationId: `import_${payload.importJobId}_${payload.offset}`,
   });
 }
