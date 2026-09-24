@@ -35,7 +35,7 @@ const serverSchema = z.object({
   SES_FROM_EMAIL: z.string().email(),
   SES_FROM_NAME: z.string().default("ABTalks"),
   SES_REPLY_TO: optionalEmail,
-  SES_CONFIGURATION_SET: z.string().min(1),
+  SES_CONFIGURATION_SET: z.preprocess((v) => (v === "" ? undefined : v), z.string().min(1).optional()),
 
   // SNS
   SNS_WEBHOOK_SECRET: z.string().min(8),

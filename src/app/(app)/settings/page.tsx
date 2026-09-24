@@ -33,7 +33,7 @@ export default async function SettingsIndexPage() {
           <Field label="From email" value={env.SES_FROM_EMAIL} />
           <Field label="Reply-to" value={env.SES_REPLY_TO ?? "—"} />
           <Field label="AWS region" value={env.AWS_REGION} />
-          <Field label="Configuration set" value={env.SES_CONFIGURATION_SET} />
+          <Field label="Configuration set" value={env.SES_CONFIGURATION_SET ?? "—"} />
           <Field label="App URL" value={env.NEXT_PUBLIC_APP_URL} />
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
