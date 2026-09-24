@@ -227,7 +227,10 @@ export const EmailService = {
         data: { status: EmailJobStatus.SKIPPED, errorCode: "suppressed", errorMessage: suppression.reason },
       });
       if (job.campaignId) {
-        completeCampaignIfDone(job.campaignId).catch((e) =>
+        // Await so the promise completes before the serverless function is
+        // frozen — otherwise the campaign never flips from SENDING to
+        // COMPLETED once the last recipient resolves.
+        await completeCampaignIfDone(job.campaignId).catch((e) =>
           logger.error({ err: e, campaignId: job.campaignId }, "campaign.complete_check.failed"),
         );
       }
@@ -304,7 +307,7 @@ export const EmailService = {
       }
       await db.$transaction(writes);
       if (job.campaignId) {
-        completeCampaignIfDone(job.campaignId).catch((e) =>
+        await completeCampaignIfDone(job.campaignId).catch((e) =>
           logger.error({ err: e, campaignId: job.campaignId }, "campaign.complete_check.failed"),
         );
       }
@@ -332,7 +335,7 @@ export const EmailService = {
       logger.warn({ jobId: job.id, kind: providerErr.kind, code: providerErr.code }, "email.delivery.failed");
       if (!retryable && job.campaignId) {
         // Permanent FAILED is a terminal state — see if the campaign is done.
-        completeCampaignIfDone(job.campaignId).catch((e) =>
+        await completeCampaignIfDone(job.campaignId).catch((e) =>
           logger.error({ err: e, campaignId: job.campaignId }, "campaign.complete_check.failed"),
         );
       }
