@@ -1,9 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, Card, Badge } from "@/components/ui";
 import { ActionsPanel } from "./_actions-panel";
-import type { CampaignStatus } from "@prisma/client";
+import { CampaignStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -24,9 +24,15 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
     include: {
       template: { select: { id: true, name: true, category: true } },
       segment: { select: { id: true, name: true, audienceSize: true } },
+      list: { select: { id: true, name: true, color: true } },
     },
   });
   if (!campaign) notFound();
+  // Drafts belong on the inline edit page (sender/recipients/subject/design
+  // sections + send controls). Detail is read-only for already-launched runs.
+  if (campaign.status === CampaignStatus.DRAFT) {
+    redirect(`/marketing/campaigns/${campaign.id}/edit`);
+  }
 
   return (
     <div className="space-y-6">
@@ -62,11 +68,15 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
                 }
               />
               <Field
-                label="Segment"
+                label="Audience"
                 value={
-                  campaign.segment ? (
+                  campaign.list ? (
+                    <Link className="underline underline-offset-4" href={`/marketing/contacts/lists/${campaign.list.id}`}>
+                      List · {campaign.list.name}
+                    </Link>
+                  ) : campaign.segment ? (
                     <Link className="underline underline-offset-4" href={`/marketing/segments/${campaign.segment.id}`}>
-                      {campaign.segment.name}
+                      Segment · {campaign.segment.name}
                     </Link>
                   ) : (
                     "—"

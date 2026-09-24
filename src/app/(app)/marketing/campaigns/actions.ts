@@ -33,30 +33,31 @@ async function uniqueSlug(base: string, ignoreId?: string): Promise<string> {
   return `${base}-${Date.now().toString(36)}`;
 }
 
+// Create a fresh DRAFT. Only the campaign name is required — sender defaults
+// come from env, and the audience/subject/template are set on the edit page.
 const createSchema = z.object({
   name: z.string().min(1).max(200),
-  subject: z.string().min(1).max(300),
-  previewText: z.string().max(300).optional(),
-  fromName: z.string().min(1).max(120),
-  fromEmail: z.string().email(),
-  replyTo: z.string().email().optional(),
-  templateId: z.string().min(1),
-  segmentId: z.string().min(1),
+  initialAudience: z
+    .string()
+    .regex(/^(segment|list):.+$/)
+    .optional(),
 });
 
-export async function createCampaign(formData: FormData) {
+export async function createDraftCampaign(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const env = getServerEnv();
   const parsed = createSchema.parse({
     name: formData.get("name"),
-    subject: formData.get("subject"),
-    previewText: formData.get("previewText") || undefined,
-    fromName: formData.get("fromName") || env.SES_FROM_NAME,
-    fromEmail: formData.get("fromEmail") || env.SES_FROM_EMAIL,
-    replyTo: formData.get("replyTo") || undefined,
-    templateId: formData.get("templateId"),
-    segmentId: formData.get("segmentId"),
+    initialAudience: formData.get("initialAudience") || undefined,
   });
+
+  let segmentId: string | null = null;
+  let listId: string | null = null;
+  if (parsed.initialAudience) {
+    const [kind, id] = parsed.initialAudience.split(":") as ["segment" | "list", string];
+    if (kind === "segment") segmentId = id;
+    else listId = id;
+  }
 
   const slug = await uniqueSlug(slugify(parsed.name));
 
@@ -64,13 +65,13 @@ export async function createCampaign(formData: FormData) {
     data: {
       name: parsed.name,
       slug,
-      subject: parsed.subject,
-      previewText: parsed.previewText,
-      fromName: parsed.fromName,
-      fromEmail: parsed.fromEmail,
-      replyTo: parsed.replyTo,
-      templateId: parsed.templateId,
-      segmentId: parsed.segmentId,
+      subject: "",
+      previewText: null,
+      fromName: env.SES_FROM_NAME,
+      fromEmail: env.SES_FROM_EMAIL,
+      replyTo: env.SES_REPLY_TO ?? null,
+      segmentId,
+      listId,
       status: CampaignStatus.DRAFT,
       createdById: user.id,
     },
@@ -80,7 +81,107 @@ export async function createCampaign(formData: FormData) {
     data: { userId: user.id, action: "campaign.create", resource: `campaign:${campaign.id}`, result: "success" },
   });
   revalidatePath("/marketing/campaigns");
-  redirect(`/marketing/campaigns/${campaign.id}`);
+  redirect(`/marketing/campaigns/${campaign.id}/edit`);
+}
+
+// Rename the draft (inline pencil on the edit page header).
+export async function updateCampaignName(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) throw new Error("Name required");
+  await db.campaign.update({ where: { id }, data: { name } });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.rename", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}`);
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
+}
+
+// Sender section.
+const senderSchema = z.object({
+  fromName: z.string().min(1).max(120),
+  fromEmail: z.string().email(),
+  replyTo: z.string().email().optional(),
+});
+
+export async function updateCampaignSender(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = senderSchema.parse({
+    fromName: formData.get("fromName"),
+    fromEmail: formData.get("fromEmail"),
+    replyTo: formData.get("replyTo") || undefined,
+  });
+  await db.campaign.update({ where: { id }, data: parsed });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_sender", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
+}
+
+// Recipients section (list OR segment — same as before).
+const audienceSchema = z.object({
+  audience: z.string().regex(/^(segment|list):.+$/),
+});
+
+export async function updateCampaignAudience(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = audienceSchema.parse({ audience: formData.get("audience") });
+  const [kind, refId] = parsed.audience.split(":") as ["segment" | "list", string];
+  await db.campaign.update({
+    where: { id },
+    data: {
+      segmentId: kind === "segment" ? refId : null,
+      listId: kind === "list" ? refId : null,
+    },
+  });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_audience", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
+}
+
+// Subject section — subject line + preview text.
+const subjectSchema = z.object({
+  subject: z.string().min(1).max(300),
+  previewText: z.string().max(300).optional(),
+});
+
+export async function updateCampaignSubject(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = subjectSchema.parse({
+    subject: formData.get("subject"),
+    previewText: formData.get("previewText") || undefined,
+  });
+  await db.campaign.update({ where: { id }, data: parsed });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_subject", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
+}
+
+// Design section — template only.
+const templateSchema = z.object({
+  templateId: z.string().min(1),
+});
+
+export async function updateCampaignTemplate(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = templateSchema.parse({ templateId: formData.get("templateId") });
+  await db.campaign.update({ where: { id }, data: parsed });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_template", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
 }
 
 export async function sendCampaignTest(campaignId: string, to: string) {
@@ -112,8 +213,25 @@ export async function sendCampaignTest(campaignId: string, to: string) {
 export async function estimateCampaign(campaignId: string) {
   await requireRole([Role.ADMIN, Role.MARKETER, Role.VIEWER]);
   const env = getServerEnv();
-  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, include: { segment: true } });
-  if (!campaign || !campaign.segment) return { ok: false as const, error: "segment not set" };
+  const campaign = await db.campaign.findUnique({
+    where: { id: campaignId },
+    include: { segment: true, list: true },
+  });
+  if (!campaign) return { ok: false as const, error: "campaign not found" };
+
+  if (campaign.listId) {
+    const matching = await db.contactListMember.count({ where: { listId: campaign.listId } });
+    const cost = (matching / 1000) * env.SES_COST_PER_THOUSAND_USD;
+    return {
+      ok: true as const,
+      matching,
+      suppressed: 0,
+      final: matching,
+      costUsd: Number(cost.toFixed(2)),
+    };
+  }
+
+  if (!campaign.segment) return { ok: false as const, error: "audience not set" };
   const rules = ruleTreeSchema.safeParse(campaign.segment.rules);
   if (!rules.success) return { ok: false as const, error: "segment rules invalid" };
   const audience = await computeAudience(rules.data);

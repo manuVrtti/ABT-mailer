@@ -251,7 +251,8 @@ model ContactList {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  members ContactListMember[]
+  members   ContactListMember[]
+  campaigns Campaign[]
 
   @@map("contact_lists")
 }
@@ -372,6 +373,7 @@ model Campaign {
   status         CampaignStatus @default(DRAFT)
   templateId     String?        @map("template_id")
   segmentId      String?        @map("segment_id")
+  listId         String?        @map("list_id")
 
   scheduledAt    DateTime?      @map("scheduled_at")
   startedAt      DateTime?      @map("started_at")
@@ -393,6 +395,7 @@ model Campaign {
 
   template   EmailTemplate?      @relation(fields: [templateId], references: [id])
   segment    Segment?            @relation(fields: [segmentId], references: [id])
+  list       ContactList?        @relation(fields: [listId], references: [id])
   createdBy  User?               @relation(fields: [createdById], references: [id])
   recipients CampaignRecipient[]
   jobs       EmailJob[]
