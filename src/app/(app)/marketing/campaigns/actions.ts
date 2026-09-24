@@ -33,13 +33,10 @@ async function uniqueSlug(base: string, ignoreId?: string): Promise<string> {
   return `${base}-${Date.now().toString(36)}`;
 }
 
-// Step 1 (Setup): create the DRAFT with just sender + name.
-const setupSchema = z.object({
+// Create a fresh DRAFT. Only the campaign name is required — sender defaults
+// come from env, and the audience/subject/template are set on the edit page.
+const createSchema = z.object({
   name: z.string().min(1).max(200),
-  fromName: z.string().min(1).max(120),
-  fromEmail: z.string().email(),
-  replyTo: z.string().email().optional(),
-  // Optional preselected audience from ?listId=/?segmentId=.
   initialAudience: z
     .string()
     .regex(/^(segment|list):.+$/)
@@ -49,11 +46,8 @@ const setupSchema = z.object({
 export async function createDraftCampaign(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const env = getServerEnv();
-  const parsed = setupSchema.parse({
+  const parsed = createSchema.parse({
     name: formData.get("name"),
-    fromName: formData.get("fromName") || env.SES_FROM_NAME,
-    fromEmail: formData.get("fromEmail") || env.SES_FROM_EMAIL,
-    replyTo: formData.get("replyTo") || undefined,
     initialAudience: formData.get("initialAudience") || undefined,
   });
 
@@ -71,13 +65,11 @@ export async function createDraftCampaign(formData: FormData) {
     data: {
       name: parsed.name,
       slug,
-      // Subject/preview/template are captured in step 3. Seed empty so the row
-      // is valid; the wizard forbids advancing past step 3 without them.
       subject: "",
       previewText: null,
-      fromName: parsed.fromName,
-      fromEmail: parsed.fromEmail,
-      replyTo: parsed.replyTo,
+      fromName: env.SES_FROM_NAME,
+      fromEmail: env.SES_FROM_EMAIL,
+      replyTo: env.SES_REPLY_TO ?? null,
       segmentId,
       listId,
       status: CampaignStatus.DRAFT,
@@ -89,36 +81,48 @@ export async function createDraftCampaign(formData: FormData) {
     data: { userId: user.id, action: "campaign.create", resource: `campaign:${campaign.id}`, result: "success" },
   });
   revalidatePath("/marketing/campaigns");
-  redirect(`/marketing/campaigns/${campaign.id}/edit/recipients`);
+  redirect(`/marketing/campaigns/${campaign.id}/edit`);
 }
 
-// Step 1 rerun (edit setup on an existing draft).
-export async function updateCampaignSetup(formData: FormData) {
+// Rename the draft (inline pencil on the edit page header).
+export async function updateCampaignName(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
-  const parsed = setupSchema.omit({ initialAudience: true }).parse({
-    name: formData.get("name"),
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) throw new Error("Name required");
+  await db.campaign.update({ where: { id }, data: { name } });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.rename", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}`);
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
+}
+
+// Sender section.
+const senderSchema = z.object({
+  fromName: z.string().min(1).max(120),
+  fromEmail: z.string().email(),
+  replyTo: z.string().email().optional(),
+});
+
+export async function updateCampaignSender(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = senderSchema.parse({
     fromName: formData.get("fromName"),
     fromEmail: formData.get("fromEmail"),
     replyTo: formData.get("replyTo") || undefined,
   });
-  await db.campaign.update({
-    where: { id },
-    data: {
-      name: parsed.name,
-      fromName: parsed.fromName,
-      fromEmail: parsed.fromEmail,
-      replyTo: parsed.replyTo,
-    },
-  });
+  await db.campaign.update({ where: { id }, data: parsed });
   await db.auditLog.create({
-    data: { userId: user.id, action: "campaign.update_setup", resource: `campaign:${id}`, result: "success" },
+    data: { userId: user.id, action: "campaign.update_sender", resource: `campaign:${id}`, result: "success" },
   });
-  revalidatePath(`/marketing/campaigns/${id}`);
-  redirect(`/marketing/campaigns/${id}/edit/recipients`);
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
 }
 
-// Step 2 (Recipients).
+// Recipients section (list OR segment — same as before).
 const audienceSchema = z.object({
   audience: z.string().regex(/^(segment|list):.+$/),
 });
@@ -138,38 +142,46 @@ export async function updateCampaignAudience(formData: FormData) {
   await db.auditLog.create({
     data: { userId: user.id, action: "campaign.update_audience", resource: `campaign:${id}`, result: "success" },
   });
-  revalidatePath(`/marketing/campaigns/${id}`);
-  redirect(`/marketing/campaigns/${id}/edit/design`);
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
 }
 
-// Step 3 (Design): template + subject + preview.
-const designSchema = z.object({
-  templateId: z.string().min(1),
+// Subject section — subject line + preview text.
+const subjectSchema = z.object({
   subject: z.string().min(1).max(300),
   previewText: z.string().max(300).optional(),
 });
 
-export async function updateCampaignDesign(formData: FormData) {
+export async function updateCampaignSubject(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
-  const parsed = designSchema.parse({
-    templateId: formData.get("templateId"),
+  const parsed = subjectSchema.parse({
     subject: formData.get("subject"),
     previewText: formData.get("previewText") || undefined,
   });
-  await db.campaign.update({
-    where: { id },
-    data: {
-      templateId: parsed.templateId,
-      subject: parsed.subject,
-      previewText: parsed.previewText,
-    },
-  });
+  await db.campaign.update({ where: { id }, data: parsed });
   await db.auditLog.create({
-    data: { userId: user.id, action: "campaign.update_design", resource: `campaign:${id}`, result: "success" },
+    data: { userId: user.id, action: "campaign.update_subject", resource: `campaign:${id}`, result: "success" },
   });
-  revalidatePath(`/marketing/campaigns/${id}`);
-  redirect(`/marketing/campaigns/${id}/edit/review`);
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
+}
+
+// Design section — template only.
+const templateSchema = z.object({
+  templateId: z.string().min(1),
+});
+
+export async function updateCampaignTemplate(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = templateSchema.parse({ templateId: formData.get("templateId") });
+  await db.campaign.update({ where: { id }, data: parsed });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_template", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}/edit`);
+  redirect(`/marketing/campaigns/${id}/edit`);
 }
 
 export async function sendCampaignTest(campaignId: string, to: string) {

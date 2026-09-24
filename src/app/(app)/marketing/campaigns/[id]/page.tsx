@@ -28,10 +28,10 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
     },
   });
   if (!campaign) notFound();
-  // Drafts belong in the wizard, not on the read-only detail page. The review
-  // step already shows the summary plus the send controls.
+  // Drafts belong on the inline edit page (sender/recipients/subject/design
+  // sections + send controls). Detail is read-only for already-launched runs.
   if (campaign.status === CampaignStatus.DRAFT) {
-    redirect(`/marketing/campaigns/${campaign.id}/edit/review`);
+    redirect(`/marketing/campaigns/${campaign.id}/edit`);
   }
 
   return (
