@@ -33,33 +33,37 @@ async function uniqueSlug(base: string, ignoreId?: string): Promise<string> {
   return `${base}-${Date.now().toString(36)}`;
 }
 
-const createSchema = z.object({
+// Step 1 (Setup): create the DRAFT with just sender + name.
+const setupSchema = z.object({
   name: z.string().min(1).max(200),
-  subject: z.string().min(1).max(300),
-  previewText: z.string().max(300).optional(),
   fromName: z.string().min(1).max(120),
   fromEmail: z.string().email(),
   replyTo: z.string().email().optional(),
-  templateId: z.string().min(1),
-  // "segment:<id>" or "list:<id>" — parsed below into segmentId / listId.
-  audience: z.string().regex(/^(segment|list):.+$/),
+  // Optional preselected audience from ?listId=/?segmentId=.
+  initialAudience: z
+    .string()
+    .regex(/^(segment|list):.+$/)
+    .optional(),
 });
 
-export async function createCampaign(formData: FormData) {
+export async function createDraftCampaign(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const env = getServerEnv();
-  const parsed = createSchema.parse({
+  const parsed = setupSchema.parse({
     name: formData.get("name"),
-    subject: formData.get("subject"),
-    previewText: formData.get("previewText") || undefined,
     fromName: formData.get("fromName") || env.SES_FROM_NAME,
     fromEmail: formData.get("fromEmail") || env.SES_FROM_EMAIL,
     replyTo: formData.get("replyTo") || undefined,
-    templateId: formData.get("templateId"),
-    audience: formData.get("audience"),
+    initialAudience: formData.get("initialAudience") || undefined,
   });
 
-  const [audienceKind, audienceId] = parsed.audience.split(":") as ["segment" | "list", string];
+  let segmentId: string | null = null;
+  let listId: string | null = null;
+  if (parsed.initialAudience) {
+    const [kind, id] = parsed.initialAudience.split(":") as ["segment" | "list", string];
+    if (kind === "segment") segmentId = id;
+    else listId = id;
+  }
 
   const slug = await uniqueSlug(slugify(parsed.name));
 
@@ -67,14 +71,15 @@ export async function createCampaign(formData: FormData) {
     data: {
       name: parsed.name,
       slug,
-      subject: parsed.subject,
-      previewText: parsed.previewText,
+      // Subject/preview/template are captured in step 3. Seed empty so the row
+      // is valid; the wizard forbids advancing past step 3 without them.
+      subject: "",
+      previewText: null,
       fromName: parsed.fromName,
       fromEmail: parsed.fromEmail,
       replyTo: parsed.replyTo,
-      templateId: parsed.templateId,
-      segmentId: audienceKind === "segment" ? audienceId : null,
-      listId: audienceKind === "list" ? audienceId : null,
+      segmentId,
+      listId,
       status: CampaignStatus.DRAFT,
       createdById: user.id,
     },
@@ -84,7 +89,87 @@ export async function createCampaign(formData: FormData) {
     data: { userId: user.id, action: "campaign.create", resource: `campaign:${campaign.id}`, result: "success" },
   });
   revalidatePath("/marketing/campaigns");
-  redirect(`/marketing/campaigns/${campaign.id}`);
+  redirect(`/marketing/campaigns/${campaign.id}/edit/recipients`);
+}
+
+// Step 1 rerun (edit setup on an existing draft).
+export async function updateCampaignSetup(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = setupSchema.omit({ initialAudience: true }).parse({
+    name: formData.get("name"),
+    fromName: formData.get("fromName"),
+    fromEmail: formData.get("fromEmail"),
+    replyTo: formData.get("replyTo") || undefined,
+  });
+  await db.campaign.update({
+    where: { id },
+    data: {
+      name: parsed.name,
+      fromName: parsed.fromName,
+      fromEmail: parsed.fromEmail,
+      replyTo: parsed.replyTo,
+    },
+  });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_setup", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}`);
+  redirect(`/marketing/campaigns/${id}/edit/recipients`);
+}
+
+// Step 2 (Recipients).
+const audienceSchema = z.object({
+  audience: z.string().regex(/^(segment|list):.+$/),
+});
+
+export async function updateCampaignAudience(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = audienceSchema.parse({ audience: formData.get("audience") });
+  const [kind, refId] = parsed.audience.split(":") as ["segment" | "list", string];
+  await db.campaign.update({
+    where: { id },
+    data: {
+      segmentId: kind === "segment" ? refId : null,
+      listId: kind === "list" ? refId : null,
+    },
+  });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_audience", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}`);
+  redirect(`/marketing/campaigns/${id}/edit/design`);
+}
+
+// Step 3 (Design): template + subject + preview.
+const designSchema = z.object({
+  templateId: z.string().min(1),
+  subject: z.string().min(1).max(300),
+  previewText: z.string().max(300).optional(),
+});
+
+export async function updateCampaignDesign(formData: FormData) {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const id = String(formData.get("id") ?? "");
+  const parsed = designSchema.parse({
+    templateId: formData.get("templateId"),
+    subject: formData.get("subject"),
+    previewText: formData.get("previewText") || undefined,
+  });
+  await db.campaign.update({
+    where: { id },
+    data: {
+      templateId: parsed.templateId,
+      subject: parsed.subject,
+      previewText: parsed.previewText,
+    },
+  });
+  await db.auditLog.create({
+    data: { userId: user.id, action: "campaign.update_design", resource: `campaign:${id}`, result: "success" },
+  });
+  revalidatePath(`/marketing/campaigns/${id}`);
+  redirect(`/marketing/campaigns/${id}/edit/review`);
 }
 
 export async function sendCampaignTest(campaignId: string, to: string) {

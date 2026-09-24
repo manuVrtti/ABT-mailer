@@ -1,9 +1,9 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, Card, Badge } from "@/components/ui";
 import { ActionsPanel } from "./_actions-panel";
-import type { CampaignStatus } from "@prisma/client";
+import { CampaignStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +28,11 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
     },
   });
   if (!campaign) notFound();
+  // Drafts belong in the wizard, not on the read-only detail page. The review
+  // step already shows the summary plus the send controls.
+  if (campaign.status === CampaignStatus.DRAFT) {
+    redirect(`/marketing/campaigns/${campaign.id}/edit/review`);
+  }
 
   return (
     <div className="space-y-6">
