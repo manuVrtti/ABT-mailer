@@ -49,7 +49,7 @@ export default async function CreateCampaignPage({
                 Campaign name
               </label>
               <p className="text-xs text-muted-foreground">
-                Internal label only — recipients don't see this.
+                Internal label only — recipients don&apos;t see this.
               </p>
               <div className="mt-2">
                 <Input

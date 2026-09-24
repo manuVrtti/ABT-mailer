@@ -468,7 +468,7 @@ function SubjectSection({
   ready: boolean;
 }) {
   const summary = ready ? (
-    <span className="italic">"{campaign.subject}"</span>
+    <span className="italic">&ldquo;{campaign.subject}&rdquo;</span>
   ) : (
     "Add a subject line for this campaign."
   );
