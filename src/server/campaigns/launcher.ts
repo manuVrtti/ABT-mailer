@@ -148,10 +148,23 @@ export async function launchCampaignFanout(campaignId: string): Promise<{ enqueu
         });
 
         if (suppression.allowed && job.status === EmailJobStatus.PENDING) {
-          await enqueueDelivery(job.id).catch((err) => {
+          try {
+            await enqueueDelivery(job.id);
+            total++;
+          } catch (err) {
+            // Enqueue failed — mark the job so we can retry it or surface
+            // the failure to the admin instead of pretending it went out.
             logger.error({ err, jobId: job.id, campaignId }, "campaign.enqueue.failed");
-          });
-          total++;
+            await db.emailJob.update({
+              where: { id: job.id },
+              data: {
+                status: EmailJobStatus.FAILED,
+                errorCode: "enqueue_failed",
+                errorMessage: (err as Error).message.slice(0, 500),
+              },
+            });
+            skipped++;
+          }
         } else {
           skipped++;
         }
