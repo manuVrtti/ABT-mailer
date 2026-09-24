@@ -257,9 +257,19 @@ export async function launchCampaign(formData: FormData) {
     throw new Error(`Campaign cannot be launched from status ${campaign.status}`);
   }
 
-  const data: Prisma.CampaignUpdateInput = sendNow
-    ? { status: CampaignStatus.QUEUED, scheduledAt: new Date() }
-    : { status: CampaignStatus.SCHEDULED, scheduledAt: new Date(scheduledForRaw) };
+  let data: Prisma.CampaignUpdateInput;
+  if (sendNow) {
+    data = { status: CampaignStatus.QUEUED, scheduledAt: new Date() };
+  } else {
+    if (!scheduledForRaw) {
+      throw new Error("Pick a date and time, or tick 'Send now'.");
+    }
+    const parsed = new Date(scheduledForRaw);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new Error("Schedule date is invalid — pick a valid date and time.");
+    }
+    data = { status: CampaignStatus.SCHEDULED, scheduledAt: parsed };
+  }
 
   await db.campaign.update({ where: { id }, data });
   await db.auditLog.create({
