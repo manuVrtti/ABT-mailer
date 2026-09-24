@@ -283,12 +283,24 @@ export async function launchCampaign(formData: FormData) {
   });
 
   // Phase 13's launcher endpoint will pick this up and create per-recipient jobs.
-  // For send-now, kick the launcher inline so the pipeline flows end-to-end.
+  // For send-now, run the fanout inline so the pipeline flows end-to-end.
+  //
+  // We MUST await here: on Vercel serverless a fire-and-forget promise dies
+  // the moment the response ships (the function is frozen), so the fanout
+  // would never enqueue anything and the campaign would sit in QUEUED
+  // forever with Started=—. Awaiting keeps the function alive until the fan
+  // out is done. For small tests (single recipient) this is a few hundred
+  // ms; for larger sends we'll layer a QStash-backed batched launcher.
   if (sendNow) {
     const { launchCampaignFanout } = await import("@/server/campaigns/launcher");
-    launchCampaignFanout(id).catch((err) =>
-      logger.error({ err, campaignId: id }, "campaign.launch.fanout_failed"),
-    );
+    try {
+      await launchCampaignFanout(id);
+    } catch (err) {
+      logger.error({ err, campaignId: id }, "campaign.launch.fanout_failed");
+      throw new Error(
+        `Fan-out failed: ${(err as Error).message}. The campaign is still in QUEUED; retry from the detail page.`,
+      );
+    }
   }
 
   revalidatePath(`/marketing/campaigns/${id}`);
