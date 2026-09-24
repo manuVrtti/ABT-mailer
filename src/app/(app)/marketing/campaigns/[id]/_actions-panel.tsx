@@ -88,11 +88,17 @@ export function ActionsPanel({
 
       {isDraftOrScheduled && (
         <Card>
-          <div className="mb-2 text-sm font-medium">Schedule or send</div>
+          <div className="mb-2 text-sm font-medium">Send or schedule</div>
           <form action={launchCampaign} className="space-y-3">
             <input type="hidden" name="id" value={id} />
+            {/* Default to Send now — this is the common case. Uncheck to schedule
+                for a specific date/time. Server rejects a schedule with no date. */}
+            <div className="flex items-center gap-2">
+              <input id="sendNow" name="sendNow" type="checkbox" defaultChecked className="h-4 w-4" />
+              <Label htmlFor="sendNow">Send now</Label>
+            </div>
             <div>
-              <Label htmlFor="scheduledFor">Schedule for (your local time)</Label>
+              <Label htmlFor="scheduledFor">Or schedule for (your local time)</Label>
               <Input
                 id="scheduledFor"
                 name="scheduledFor"
@@ -100,10 +106,9 @@ export function ActionsPanel({
                 value={scheduledFor}
                 onChange={(e) => setScheduledFor(e.target.value)}
               />
-            </div>
-            <div className="flex items-center gap-2">
-              <input id="sendNow" name="sendNow" type="checkbox" className="h-4 w-4" />
-              <Label htmlFor="sendNow">Or send now (ignores schedule)</Label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Uncheck &quot;Send now&quot; and pick a time here to schedule.
+              </p>
             </div>
             <div className="flex justify-end gap-2">
               <Button type="submit" variant="primary">
