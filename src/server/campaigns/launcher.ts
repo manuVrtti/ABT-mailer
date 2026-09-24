@@ -25,10 +25,11 @@ const BATCH_SIZE = 500;
 export async function launchCampaignFanout(campaignId: string): Promise<{ enqueued: number; skipped: number }> {
   const campaign = await db.campaign.findUnique({
     where: { id: campaignId },
-    include: { segment: true, template: true },
+    include: { segment: true, list: true, template: true },
   });
   if (!campaign) throw new Error("Campaign not found");
-  if (!campaign.segment || !campaign.template) throw new Error("Segment and template required");
+  if (!campaign.template) throw new Error("Template required");
+  if (!campaign.segment && !campaign.list) throw new Error("Segment or list required");
   if (
     campaign.status !== CampaignStatus.QUEUED &&
     campaign.status !== CampaignStatus.SCHEDULED &&
@@ -37,8 +38,15 @@ export async function launchCampaignFanout(campaignId: string): Promise<{ enqueu
     throw new Error(`Cannot fan out from status ${campaign.status}`);
   }
 
-  const rules = ruleTreeSchema.parse(campaign.segment.rules);
-  const where = compileWhere(rules);
+  // Audience is either a Segment (compiled to a Prisma where) or a ContactList
+  // (a fixed member set). Both are cursor-paginated over MarketingContact.
+  let where: Prisma.MarketingContactWhereInput;
+  if (campaign.list) {
+    where = { lists: { some: { listId: campaign.list.id } } };
+  } else {
+    const rules = ruleTreeSchema.parse(campaign.segment!.rules);
+    where = compileWhere(rules);
+  }
 
   await db.campaign.update({
     where: { id: campaignId },

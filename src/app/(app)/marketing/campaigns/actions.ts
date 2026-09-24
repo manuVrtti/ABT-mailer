@@ -41,7 +41,8 @@ const createSchema = z.object({
   fromEmail: z.string().email(),
   replyTo: z.string().email().optional(),
   templateId: z.string().min(1),
-  segmentId: z.string().min(1),
+  // "segment:<id>" or "list:<id>" — parsed below into segmentId / listId.
+  audience: z.string().regex(/^(segment|list):.+$/),
 });
 
 export async function createCampaign(formData: FormData) {
@@ -55,8 +56,10 @@ export async function createCampaign(formData: FormData) {
     fromEmail: formData.get("fromEmail") || env.SES_FROM_EMAIL,
     replyTo: formData.get("replyTo") || undefined,
     templateId: formData.get("templateId"),
-    segmentId: formData.get("segmentId"),
+    audience: formData.get("audience"),
   });
+
+  const [audienceKind, audienceId] = parsed.audience.split(":") as ["segment" | "list", string];
 
   const slug = await uniqueSlug(slugify(parsed.name));
 
@@ -70,7 +73,8 @@ export async function createCampaign(formData: FormData) {
       fromEmail: parsed.fromEmail,
       replyTo: parsed.replyTo,
       templateId: parsed.templateId,
-      segmentId: parsed.segmentId,
+      segmentId: audienceKind === "segment" ? audienceId : null,
+      listId: audienceKind === "list" ? audienceId : null,
       status: CampaignStatus.DRAFT,
       createdById: user.id,
     },
@@ -112,8 +116,25 @@ export async function sendCampaignTest(campaignId: string, to: string) {
 export async function estimateCampaign(campaignId: string) {
   await requireRole([Role.ADMIN, Role.MARKETER, Role.VIEWER]);
   const env = getServerEnv();
-  const campaign = await db.campaign.findUnique({ where: { id: campaignId }, include: { segment: true } });
-  if (!campaign || !campaign.segment) return { ok: false as const, error: "segment not set" };
+  const campaign = await db.campaign.findUnique({
+    where: { id: campaignId },
+    include: { segment: true, list: true },
+  });
+  if (!campaign) return { ok: false as const, error: "campaign not found" };
+
+  if (campaign.listId) {
+    const matching = await db.contactListMember.count({ where: { listId: campaign.listId } });
+    const cost = (matching / 1000) * env.SES_COST_PER_THOUSAND_USD;
+    return {
+      ok: true as const,
+      matching,
+      suppressed: 0,
+      final: matching,
+      costUsd: Number(cost.toFixed(2)),
+    };
+  }
+
+  if (!campaign.segment) return { ok: false as const, error: "audience not set" };
   const rules = ruleTreeSchema.safeParse(campaign.segment.rules);
   if (!rules.success) return { ok: false as const, error: "segment rules invalid" };
   const audience = await computeAudience(rules.data);

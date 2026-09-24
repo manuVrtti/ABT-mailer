@@ -25,7 +25,11 @@ export default async function CampaignsPage() {
   const campaigns = await db.campaign.findMany({
     orderBy: { updatedAt: "desc" },
     take: 100,
-    include: { segment: { select: { name: true } }, template: { select: { name: true } } },
+    include: {
+      segment: { select: { name: true } },
+      list: { select: { name: true } },
+      template: { select: { name: true } },
+    },
   });
 
   return (
@@ -61,7 +65,7 @@ export default async function CampaignsPage() {
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{c.name}</div>
                         <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                          {c.template?.name ?? "no template"} · {c.segment?.name ?? "no segment"}
+                          {c.template?.name ?? "no template"} · {c.list?.name ?? c.segment?.name ?? "no audience"}
                         </div>
                       </div>
                     </div>

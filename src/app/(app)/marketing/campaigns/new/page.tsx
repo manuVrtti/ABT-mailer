@@ -7,29 +7,49 @@ import Link from "next/link";
 export const metadata = { title: "New campaign" };
 export const dynamic = "force-dynamic";
 
-export default async function NewCampaignPage() {
+export default async function NewCampaignPage({
+  searchParams,
+}: {
+  searchParams: { listId?: string; segmentId?: string };
+}) {
   const env = getServerEnv();
-  const [templates, segments] = await Promise.all([
+  const [templates, segments, lists] = await Promise.all([
     db.emailTemplate.findMany({ orderBy: { updatedAt: "desc" }, select: { id: true, name: true, category: true } }),
     db.segment.findMany({ orderBy: { updatedAt: "desc" }, select: { id: true, name: true, audienceSize: true } }),
+    db.contactList.findMany({
+      orderBy: { createdAt: "desc" },
+      select: { id: true, name: true, _count: { select: { members: true } } },
+    }),
   ]);
+
+  const preselected = searchParams.listId
+    ? `list:${searchParams.listId}`
+    : searchParams.segmentId
+    ? `segment:${searchParams.segmentId}`
+    : undefined;
+  const hasAnyAudience = segments.length + lists.length > 0;
 
   return (
     <div>
       <PageHeader title="New campaign" description="Pick an audience, a template, and the sender details. You can send a test before launching." />
-      {templates.length === 0 || segments.length === 0 ? (
+      {templates.length === 0 || !hasAnyAudience ? (
         <Card>
-          <div className="text-sm">You need at least one template and one segment before creating a campaign.</div>
+          <div className="text-sm">You need at least one template and one audience (list or segment) before creating a campaign.</div>
           <div className="mt-3 flex gap-3 text-sm">
             {templates.length === 0 && (
               <Link href="/marketing/templates/new" className="underline underline-offset-4">
                 Create a template
               </Link>
             )}
-            {segments.length === 0 && (
-              <Link href="/marketing/segments/new" className="underline underline-offset-4">
-                Create a segment
-              </Link>
+            {!hasAnyAudience && (
+              <>
+                <Link href="/marketing/contacts/lists/new" className="underline underline-offset-4">
+                  Create a list
+                </Link>
+                <Link href="/marketing/segments/new" className="underline underline-offset-4">
+                  Create a segment
+                </Link>
+              </>
             )}
           </div>
         </Card>
@@ -42,13 +62,27 @@ export default async function NewCampaignPage() {
                 <Input id="name" name="name" required placeholder="Freshers Registration Drive" />
               </div>
               <div>
-                <Label htmlFor="segmentId">Audience segment</Label>
-                <Select id="segmentId" name="segmentId" required>
-                  {segments.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.audienceSize != null ? `(~${s.audienceSize.toLocaleString()})` : ""}
-                    </option>
-                  ))}
+                <Label htmlFor="audience">Audience</Label>
+                <Select id="audience" name="audience" required defaultValue={preselected}>
+                  {lists.length > 0 && (
+                    <optgroup label="Lists">
+                      {lists.map((l) => (
+                        <option key={l.id} value={`list:${l.id}`}>
+                          {l.name} (~{l._count.members.toLocaleString()})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {segments.length > 0 && (
+                    <optgroup label="Segments">
+                      {segments.map((s) => (
+                        <option key={s.id} value={`segment:${s.id}`}>
+                          {s.name}
+                          {s.audienceSize != null ? ` (~${s.audienceSize.toLocaleString()})` : ""}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </Select>
               </div>
               <div>

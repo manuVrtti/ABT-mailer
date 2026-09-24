@@ -24,6 +24,7 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
     include: {
       template: { select: { id: true, name: true, category: true } },
       segment: { select: { id: true, name: true, audienceSize: true } },
+      list: { select: { id: true, name: true, color: true } },
     },
   });
   if (!campaign) notFound();
@@ -62,11 +63,15 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
                 }
               />
               <Field
-                label="Segment"
+                label="Audience"
                 value={
-                  campaign.segment ? (
+                  campaign.list ? (
+                    <Link className="underline underline-offset-4" href={`/marketing/contacts/lists/${campaign.list.id}`}>
+                      List · {campaign.list.name}
+                    </Link>
+                  ) : campaign.segment ? (
                     <Link className="underline underline-offset-4" href={`/marketing/segments/${campaign.segment.id}`}>
-                      {campaign.segment.name}
+                      Segment · {campaign.segment.name}
                     </Link>
                   ) : (
                     "—"

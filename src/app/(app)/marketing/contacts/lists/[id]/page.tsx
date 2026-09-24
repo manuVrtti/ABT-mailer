@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { ListChecks, Users } from "lucide-react";
+import { ListChecks, Users, Megaphone } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Card, Table, THead, TR, TH, TD, EmptyState, Button } from "@/components/ui";
 import { ContactsTabs } from "../../_tabs";
@@ -59,6 +59,10 @@ export default async function ListDetailPage({ params }: { params: { id: string 
           </div>
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-3 py-1 text-[10px] font-medium ${chip}`}>{list.color}</span>
+            <Button as="a" href={`/marketing/campaigns/new?listId=${list.id}`} variant="secondary">
+              <Megaphone className="mr-1 h-4 w-4" />
+              Send campaign
+            </Button>
             <DeleteListButton id={list.id} name={list.name} />
           </div>
         </div>
