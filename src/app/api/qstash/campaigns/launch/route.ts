@@ -42,7 +42,8 @@ export async function POST(req: Request) {
         where: { id },
         data: { status: CampaignStatus.QUEUED },
       });
-      const r = await launchCampaignFanout(id);
+      // Short budget per campaign — big ones continue via /campaigns/fanout.
+      const r = await launchCampaignFanout(id, { timeBudgetMs: 10_000 });
       results.push({ id, ...r });
     } catch (err) {
       logger.error({ err, campaignId: id }, "scheduled_launcher.failed");

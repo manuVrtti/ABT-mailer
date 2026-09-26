@@ -30,6 +30,24 @@ export async function checkSuppression(
 ): Promise<SuppressionDecision> {
   const normalized = normalizeEmail(email);
   const rows = await db.suppression.findMany({ where: { email: normalized } });
+  return decideSuppression(rows, category);
+}
+
+/** One query for a whole batch of recipients. Emails must already be normalized. */
+export async function checkSuppressionBulk(
+  emails: string[],
+  category: EmailCategory,
+): Promise<Map<string, SuppressionDecision>> {
+  const rows = emails.length > 0 ? await db.suppression.findMany({ where: { email: { in: emails } } }) : [];
+  const byEmail = new Map<string, typeof rows>();
+  for (const r of rows) byEmail.set(r.email, [...(byEmail.get(r.email) ?? []), r]);
+  return new Map(emails.map((e) => [e, decideSuppression(byEmail.get(e) ?? [], category)]));
+}
+
+function decideSuppression(
+  rows: { reason: SuppressionReason; category: EmailCategory }[],
+  category: EmailCategory,
+): SuppressionDecision {
   if (rows.length === 0) return { allowed: true };
 
   const hardBounce = rows.find((r) => r.reason === SuppressionReason.HARD_BOUNCE);

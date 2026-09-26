@@ -28,6 +28,8 @@ import {
 import { ActionsPanel } from "../_actions-panel";
 
 export const dynamic = "force-dynamic";
+// Launch server action runs here; the launcher self-limits to ~40s.
+export const maxDuration = 60;
 export const metadata = { title: "Edit campaign" };
 
 type OpenSection = "sender" | "recipients" | "subject" | "design" | null;

@@ -377,6 +377,11 @@ model Campaign {
 
   scheduledAt    DateTime?      @map("scheduled_at")
   startedAt      DateTime?      @map("started_at")
+  // Set when the launcher has queued every recipient; COMPLETED waits for it.
+  fanoutCompletedAt DateTime?   @map("fanout_completed_at")
+  // Template HTML frozen at launch; each recipient's body is rendered from it
+  // at delivery time instead of storing a full copy per email job.
+  htmlSnapshot   String?        @db.Text @map("html_snapshot")
   completedAt    DateTime?      @map("completed_at")
   cancelledAt    DateTime?      @map("cancelled_at")
 

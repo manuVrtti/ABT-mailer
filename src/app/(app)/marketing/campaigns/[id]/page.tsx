@@ -6,6 +6,8 @@ import { ActionsPanel } from "./_actions-panel";
 import { CampaignStatus } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+// Launch/resume server actions run here; the launcher self-limits to ~40s.
+export const maxDuration = 60;
 
 const statusTone: Record<CampaignStatus, "muted" | "success" | "warning" | "destructive" | "info"> = {
   DRAFT: "muted",
