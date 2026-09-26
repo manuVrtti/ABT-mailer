@@ -60,6 +60,66 @@ export async function enqueueDelivery(jobId: string): Promise<{ queued: boolean;
   return { queued: true, via: "qstash" };
 }
 
+const QSTASH_BATCH = 100;
+
+/**
+ * Enqueue many EmailJobs with one QStash request per 100 jobs instead of one
+ * request per job. Used by the campaign launcher and resume.
+ */
+export async function enqueueDeliveries(jobIds: string[]): Promise<number> {
+  if (jobIds.length === 0) return 0;
+  const jobs = await db.emailJob.findMany({
+    where: { id: { in: jobIds } },
+    select: { id: true, emailType: true, scheduledFor: true },
+  });
+
+  if (!isQStashConfigured()) {
+    logger.warn({ count: jobs.length }, "queue.inline_fallback — QSTASH not configured");
+    for (const j of jobs) {
+      await EmailService.deliverJob(j.id).catch((err) => logger.error({ err, jobId: j.id }, "inline.deliver.failed"));
+    }
+    return jobs.length;
+  }
+
+  const env = getServerEnv();
+  const client = qstashClient();
+  const url = new URL("/api/qstash/deliver", env.NEXT_PUBLIC_APP_URL).toString();
+
+  for (let i = 0; i < jobs.length; i += QSTASH_BATCH) {
+    const chunk = jobs.slice(i, i + QSTASH_BATCH);
+    await client.batchJSON(
+      chunk.map((j) => ({
+        queueName: j.emailType === EmailType.TRANSACTIONAL ? env.QSTASH_QUEUE_TRANSACTIONAL : env.QSTASH_QUEUE_MARKETING,
+        url,
+        body: { jobId: j.id } satisfies DeliveryJobBody,
+        retries: 3,
+        delay: j.scheduledFor ? Math.max(0, Math.floor((j.scheduledFor.getTime() - Date.now()) / 1000)) : undefined,
+        deduplicationId: `deliver_${j.id}`,
+      })),
+    );
+    await db.emailJob.updateMany({
+      where: { id: { in: chunk.map((j) => j.id) } },
+      data: { queuedAt: new Date() },
+    });
+  }
+  return jobs.length;
+}
+
+/**
+ * Hand the rest of a large campaign launch to a fresh function invocation.
+ * Published directly (not into the bulk queue) so it isn't stuck behind the
+ * delivery messages it just created.
+ */
+export async function enqueueFanoutContinuation(campaignId: string, afterContactId: string): Promise<void> {
+  const env = getServerEnv();
+  await qstashClient().publishJSON({
+    url: new URL("/api/qstash/campaigns/fanout", env.NEXT_PUBLIC_APP_URL).toString(),
+    body: { campaignId, afterContactId },
+    retries: 3,
+    deduplicationId: `fanout_${campaignId}_${afterContactId}`,
+  });
+}
+
 /**
  * Enqueue a chunked import task. Used by Phase 9 (CSV import). Uses the
  * marketing/bulk queue so a huge import never crowds out password resets.

@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { normalizeEmail } from "@/lib/utils";
 import { getServerEnv } from "@/lib/env";
 import { unsubscribeUrl } from "@/server/unsubscribe/token";
-import { completeCampaignIfDone } from "@/server/campaigns/launcher";
+import { completeCampaignIfDone, renderCampaignHtml } from "@/server/campaigns/launcher";
 import {
   marketingIdempotencyKey,
   transactionalIdempotencyKey,
@@ -263,12 +263,28 @@ export const EmailService = {
       headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
     }
     try {
+      let html = job.renderedHtml;
+      if (html === null && job.campaignId) {
+        // Campaign bodies are rendered here from the per-campaign snapshot
+        // (see launcher) instead of being stored per job.
+        const camp = await db.campaign.findUnique({
+          where: { id: job.campaignId },
+          select: { slug: true, htmlSnapshot: true, template: { select: { html: true } } },
+        });
+        const templateHtml = camp?.htmlSnapshot ?? camp?.template?.html;
+        if (!camp || !templateHtml) throw new ProviderError("permanent", "campaign template missing");
+        html = renderCampaignHtml(templateHtml, (job.variables ?? {}) as Record<string, string>, {
+          email: job.recipientEmail,
+          campaignId: job.campaignId,
+          slug: camp.slug,
+        });
+      }
       const result = await provider.send({
         to: job.recipientEmail,
         from: { email: job.fromEmail, name: job.fromName },
         replyTo: job.replyTo ?? undefined,
         subject: job.subject,
-        html: job.renderedHtml ?? "",
+        html: html ?? "",
         text: job.renderedText ?? undefined,
         configurationSet: env.SES_CONFIGURATION_SET,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
