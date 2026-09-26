@@ -21,9 +21,28 @@ describe("renderTemplate", () => {
     expect(() => renderTemplate("Hi {{name}}", {}, { strict: true })).toThrow(MissingVariableError);
   });
 
-  // Sanitization behavior is tested indirectly through the service's rendered
-  // output; DOMPurify itself is well-covered upstream. We keep this unit level
-  // focused on the substitution grammar.
+  it("understands Brevo-style contact tokens and spaced default filters", () => {
+    const tpl = 'Hi {{ contact.FIRSTNAME | default : "there" }},';
+    expect(renderTemplate(tpl, { first_name: "Suyash" })).toBe("Hi Suyash,");
+    expect(renderTemplate(tpl, { first_name: "" })).toBe("Hi there,");
+    expect(renderTemplate(tpl, {})).toBe("Hi there,");
+  });
+
+  it("accepts HTML-encoded quotes around the default", () => {
+    expect(renderTemplate("Hi {{ contact.FIRSTNAME | default : &quot;there&quot; }}", {})).toBe("Hi there");
+  });
+
+  it("keeps design markup but strips executable content when sanitizing", () => {
+    const html =
+      '<head><link href="https://fonts.googleapis.com/css2?family=Inter" rel="stylesheet"><style>.pill{letter-spacing:2px;text-transform:uppercase}</style></head>' +
+      '<p class="pill" onclick="alert(1)">x</p><script>alert(1)</script><a href="javascript:alert(1)">y</a>';
+    const out = renderTemplate(html, {}, { sanitize: true });
+    expect(out).toContain("<link");
+    expect(out).toContain("text-transform:uppercase");
+    expect(out).not.toContain("<script");
+    expect(out).not.toContain("onclick");
+    expect(out).not.toContain("javascript:");
+  });
 });
 
 describe("extractVariables", () => {
