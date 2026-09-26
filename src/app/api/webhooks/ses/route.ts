@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import MessageValidator from "sns-validator";
-import { EmailCategory, SuppressionReason } from "@prisma/client";
+import { EmailCategory, EmailEventType, SuppressionReason } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { EmailService } from "@/server/email";
@@ -39,10 +39,12 @@ export async function POST(req: Request) {
   }
 
   if (envelope.Type === "SubscriptionConfirmation" && envelope.SubscribeURL) {
-    // Confirm asynchronously; don't block the SNS retry loop.
-    fetch(envelope.SubscribeURL).catch(() => {});
-    logger.info({ topic: envelope.TopicArn }, "sns.subscription.confirmed");
-    return NextResponse.json({ ok: true, confirmed: true });
+    // Awaited: on Vercel an un-awaited fetch is dropped once we respond, and
+    // the SNS subscription would stay "Pending confirmation" forever.
+    const res = await fetch(envelope.SubscribeURL).catch((err: Error) => err);
+    const ok = !(res instanceof Error) && res.ok;
+    logger.info({ topic: envelope.TopicArn, ok }, "sns.subscription.confirm");
+    return NextResponse.json({ ok, confirmed: ok }, { status: ok ? 200 : 502 });
   }
 
   if (envelope.Type === "UnsubscribeConfirmation") {
@@ -73,6 +75,13 @@ async function bumpCampaignCounter(event: {
 }) {
   const job = await findJob(event);
   if (!job?.campaignId) return;
+  // Campaign counters are per recipient: repeat opens/clicks and SNS
+  // redeliveries are recorded as events but only the first one counts.
+  // processProviderEvent has already inserted this event, so >1 means repeat.
+  const seen = await db.emailEvent.count({
+    where: { jobId: job.id, type: event.type as EmailEventType },
+  });
+  if (seen > 1) return;
   switch (event.type) {
     case "DELIVERY":
       await db.campaign.update({ where: { id: job.campaignId }, data: { deliveredCount: { increment: 1 } } });

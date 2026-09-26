@@ -91,7 +91,8 @@ export function parseSesEvent(rawJson: string): ProviderEvent | null {
 
 function normalizeType(t?: string): ProviderEvent["type"] | null {
   if (!t) return null;
-  const u = t.toUpperCase();
+  // Config-set events use e.g. "Rendering Failure"; normalize spaces too.
+  const u = t.toUpperCase().replace(/\s+/g, "_");
   if (
     u === "SEND" ||
     u === "DELIVERY" ||
