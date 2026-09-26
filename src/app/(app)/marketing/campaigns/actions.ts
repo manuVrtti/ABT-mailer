@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { CampaignStatus, Prisma, Role } from "@prisma/client";
+import { CampaignStatus, EmailJobStatus, Prisma, Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { computeAudience } from "@/server/segments/compile";
@@ -307,6 +307,38 @@ export async function launchCampaign(formData: FormData) {
   redirect(`/marketing/campaigns/${id}`);
 }
 
+const IN_FLIGHT: CampaignStatus[] = [CampaignStatus.QUEUED, CampaignStatus.SENDING, CampaignStatus.PAUSED];
+
+export async function deleteCampaign(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const campaign = await db.campaign.findUnique({ where: { id }, select: { status: true, name: true } });
+  if (!campaign) return { ok: false, error: "Campaign not found." };
+  if (IN_FLIGHT.includes(campaign.status)) {
+    return { ok: false, error: `“${campaign.name}” is ${campaign.status.toLowerCase()}. Cancel it first, then delete.` };
+  }
+
+  // Email jobs survive the delete (their campaign link is nulled) so delivery
+  // history stays intact. Anything still unsent must never go out afterwards.
+  await db.$transaction([
+    db.emailJob.updateMany({
+      where: { campaignId: id, status: { in: [EmailJobStatus.PENDING, EmailJobStatus.QUEUED] } },
+      data: { status: EmailJobStatus.SKIPPED, errorCode: "campaign_deleted" },
+    }),
+    db.campaign.delete({ where: { id } }),
+  ]);
+  await db.auditLog.create({
+    data: {
+      userId: user.id,
+      action: "campaign.delete",
+      resource: `campaign:${id}`,
+      metadata: { name: campaign.name, status: campaign.status },
+      result: "success",
+    },
+  });
+  revalidatePath("/marketing/campaigns");
+  return { ok: true };
+}
+
 export async function cancelCampaign(id: string) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const campaign = await db.campaign.findUnique({ where: { id } });
@@ -339,7 +371,7 @@ export async function resumeCampaign(id: string) {
   });
   // Requeue any still-PENDING recipients.
   const { requeuePendingRecipients } = await import("@/server/campaigns/launcher");
-  requeuePendingRecipients(id).catch((err) =>
+  await requeuePendingRecipients(id).catch((err) =>
     logger.error({ err, campaignId: id }, "campaign.resume.requeue_failed"),
   );
   revalidatePath(`/marketing/campaigns/${id}`);

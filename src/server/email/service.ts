@@ -199,7 +199,11 @@ export const EmailService = {
     const job = await db.emailJob.findUnique({ where: { id: jobId } });
     if (!job) throw new Error(`job_not_found:${jobId}`);
 
-    if (job.status === EmailJobStatus.SENT || job.status === EmailJobStatus.DELIVERED) {
+    // Only PENDING/QUEUED/SENDING jobs may be delivered. Anything terminal
+    // (sent, skipped because its campaign was cancelled/deleted, failed, ...)
+    // must not go out even if a stale queue message arrives.
+    const deliverable: EmailJobStatus[] = [EmailJobStatus.PENDING, EmailJobStatus.QUEUED, EmailJobStatus.SENDING];
+    if (!deliverable.includes(job.status)) {
       return { skipped: true, reason: "already_sent" as const };
     }
 
