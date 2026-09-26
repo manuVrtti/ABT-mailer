@@ -31,7 +31,8 @@ export async function startCsvImport(formData: FormData) {
   // Run inline for now. When QStash chunk workers land (Phase 13-ish extension),
   // the parse can be split across multiple invocations. In practice a single
   // Vercel function handles 100K rows well under the 300s cap.
-  importCsv(job.id, csvText).catch(async (err) => {
+  // Awaited: on Vercel an un-awaited promise is dropped once the response ships.
+  await importCsv(job.id, csvText).catch(async (err) => {
     logger.error({ err, importJobId: job.id }, "csv.import.failed");
     await db.importJob.update({
       where: { id: job.id },

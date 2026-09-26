@@ -86,8 +86,9 @@ export async function POST(req: Request) {
   }
 
   if (result.status === "enqueued") {
-    // Push into the priority queue for immediate delivery.
-    enqueueDelivery(result.jobId).catch((err) =>
+    // Push into the priority queue for immediate delivery. Awaited: on Vercel
+    // an un-awaited promise is dropped once the response is sent.
+    await enqueueDelivery(result.jobId).catch((err) =>
       logger.error({ err, jobId: result.jobId }, "transactional.enqueue_delivery.failed"),
     );
   }

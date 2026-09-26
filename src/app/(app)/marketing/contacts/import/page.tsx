@@ -2,6 +2,7 @@ import { PageHeader, Card, Button, Label } from "@/components/ui";
 import { startCsvImport } from "../actions";
 
 export const metadata = { title: "Import contacts" };
+export const maxDuration = 60;
 
 export default function ImportContactsPage() {
   return (
