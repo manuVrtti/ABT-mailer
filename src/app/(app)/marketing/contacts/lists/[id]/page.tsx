@@ -6,9 +6,12 @@ import { ContactsTabs } from "../../_tabs";
 import { listColorChip, listColorGradient } from "../_colors";
 import { DeleteListButton } from "./_delete-button";
 import { AddMembersPanel } from "./_add-members";
+import { ImportCsvPanel } from "./_import-csv";
 import { RemoveMemberButton } from "./_remove-member";
 
 export const dynamic = "force-dynamic";
+// CSV imports into a list run as a server action on this route.
+export const maxDuration = 60;
 
 export default async function ListDetailPage({ params }: { params: { id: string } }) {
   const list = await db.contactList.findUnique({
@@ -59,7 +62,12 @@ export default async function ListDetailPage({ params }: { params: { id: string 
           </div>
           <div className="flex items-center gap-2">
             <span className={`rounded-full px-3 py-1 text-[10px] font-medium ${chip}`}>{list.color}</span>
-            <Button as="a" href={`/marketing/campaigns/new?listId=${list.id}`} variant="secondary">
+            <Button
+              as="a"
+              href={`/marketing/campaigns/new?listId=${list.id}`}
+              variant="secondary"
+              className="border-white/40 text-slate-900 dark:text-white"
+            >
               <Megaphone className="mr-1 h-4 w-4" />
               Send campaign
             </Button>
@@ -68,6 +76,7 @@ export default async function ListDetailPage({ params }: { params: { id: string 
         </div>
       </div>
 
+      <ImportCsvPanel listId={list.id} />
       <AddMembersPanel listId={list.id} />
 
       <section>
