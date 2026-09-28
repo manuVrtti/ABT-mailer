@@ -3,6 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, Card, Badge } from "@/components/ui";
 import { ActionsPanel } from "./_actions-panel";
+import { RecipientActivitySection, parseActivityFilter } from "./_recipient-activity";
 import { CampaignStatus } from "@prisma/client";
 import { campaignListIds } from "@/server/campaigns/audience";
 
@@ -21,7 +22,13 @@ const statusTone: Record<CampaignStatus, "muted" | "success" | "warning" | "dest
   FAILED: "destructive",
 };
 
-export default async function CampaignDetailPage({ params }: { params: { id: string } }) {
+export default async function CampaignDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { id: string };
+  searchParams: { activity?: string; q?: string; page?: string };
+}) {
   const campaign = await db.campaign.findUnique({
     where: { id: params.id },
     include: {
@@ -126,6 +133,15 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
 
         <ActionsPanel id={campaign.id} status={campaign.status} audienceSize={campaign.segment?.audienceSize ?? null} />
       </div>
+
+      {campaign.startedAt && (
+        <RecipientActivitySection
+          campaignId={campaign.id}
+          filter={parseActivityFilter(searchParams.activity)}
+          search={(searchParams.q ?? "").slice(0, 200)}
+          page={Math.max(1, Number.parseInt(searchParams.page ?? "1", 10) || 1)}
+        />
+      )}
     </div>
   );
 }
