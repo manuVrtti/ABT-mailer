@@ -70,6 +70,8 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
                     <Link className="underline underline-offset-4" href={`/marketing/templates/${campaign.template.id}`}>
                       {campaign.template.name}
                     </Link>
+                  ) : campaign.customHtml || campaign.htmlSnapshot ? (
+                    "Custom HTML"
                   ) : (
                     "—"
                   )

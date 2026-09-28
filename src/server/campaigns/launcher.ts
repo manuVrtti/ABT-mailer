@@ -66,7 +66,8 @@ export async function launchCampaignFanout(
     include: { segment: true, list: true, template: true },
   });
   if (!campaign) throw new Error("Campaign not found");
-  if (!campaign.template) throw new Error("Template required");
+  const designHtml = campaign.customHtml ?? campaign.template?.html;
+  if (!designHtml) throw new Error("Design required");
   const listIds = campaignListIds(campaign);
   if (!campaign.segment && listIds.length === 0) throw new Error("Segment or list required");
   if (campaign.status === CampaignStatus.CANCELLED) return { enqueued: 0, skipped: 0, done: true };
@@ -87,7 +88,7 @@ export async function launchCampaignFanout(
       data: {
         status: campaign.status === CampaignStatus.PAUSED ? CampaignStatus.PAUSED : CampaignStatus.SENDING,
         startedAt: campaign.startedAt ?? new Date(),
-        htmlSnapshot: campaign.htmlSnapshot ?? campaign.template.html,
+        htmlSnapshot: campaign.htmlSnapshot ?? designHtml,
         fanoutCompletedAt: null,
       },
     });

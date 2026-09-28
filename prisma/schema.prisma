@@ -385,6 +385,8 @@ model Campaign {
   // Template HTML frozen at launch; each recipient's body is rendered from it
   // at delivery time instead of storing a full copy per email job.
   htmlSnapshot   String?        @db.Text @map("html_snapshot")
+  // Campaign-only design (pasted HTML) used instead of a library template.
+  customHtml     String?        @db.Text @map("custom_html")
   completedAt    DateTime?      @map("completed_at")
   cancelledAt    DateTime?      @map("cancelled_at")
 

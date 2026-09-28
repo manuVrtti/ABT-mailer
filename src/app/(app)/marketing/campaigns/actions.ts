@@ -9,7 +9,8 @@ import { requireRole } from "@/lib/auth/session";
 import { computeAudience } from "@/server/segments/compile";
 import { ruleTreeSchema } from "@/server/segments/schema";
 import { campaignListIds, countListsAudience } from "@/server/campaigns/audience";
-import { renderTemplate } from "@/server/email/render";
+import { MARKETING_TEMPLATE_CATEGORIES } from "../templates/categories";
+import { extractVariables, renderTemplate } from "@/server/email/render";
 import { EmailService } from "@/server/email";
 import { getServerEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
@@ -178,17 +179,63 @@ export async function updateCampaignSubject(formData: FormData) {
 }
 
 // Design section — template only.
-const templateSchema = z.object({
-  templateId: z.string().min(1),
-});
-
-export async function updateCampaignTemplate(formData: FormData) {
+/**
+ * Design section. Either pick a library template, or paste HTML for this
+ * campaign only — optionally also saving it to the template library, in which
+ * case the campaign simply points at the new template.
+ */
+export async function updateCampaignDesign(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
-  const parsed = templateSchema.parse({ templateId: formData.get("templateId") });
-  await db.campaign.update({ where: { id }, data: parsed });
+  const mode = String(formData.get("mode") ?? "template");
+  const campaign = await db.campaign.findUnique({ where: { id }, select: { id: true, subject: true, status: true } });
+  if (!campaign) throw new Error("Campaign not found");
+  if (campaign.status !== CampaignStatus.DRAFT) throw new Error("Only draft campaigns can change design");
+
+  let action = "campaign.update_template";
+  if (mode === "html") {
+    const html = String(formData.get("html") ?? "");
+    if (!html.trim()) throw new Error("Paste some HTML first");
+    if (html.length > 2_000_000) throw new Error("HTML is too large (max ~2 MB)");
+
+    if (formData.get("saveAsTemplate") === "on") {
+      const name = String(formData.get("templateName") ?? "").trim();
+      const category = String(formData.get("templateCategory") ?? "Custom");
+      if (!name) throw new Error("Template name is required");
+      if (!(MARKETING_TEMPLATE_CATEGORIES as readonly string[]).includes(category)) throw new Error("Invalid category");
+      const template = await db.emailTemplate.create({
+        data: {
+          name,
+          category,
+          subject: campaign.subject.trim() || name,
+          designJson: { mode: "raw" },
+          html,
+          variables: extractVariables(html),
+          createdById: user.id,
+        },
+      });
+      await db.auditLog.create({
+        data: {
+          userId: user.id,
+          action: "marketing_template.create",
+          resource: `template:${template.id}`,
+          metadata: { name, category, from: `campaign:${id}` },
+          result: "success",
+        },
+      });
+      await db.campaign.update({ where: { id }, data: { templateId: template.id, customHtml: null } });
+      revalidatePath("/marketing/templates");
+    } else {
+      await db.campaign.update({ where: { id }, data: { customHtml: html, templateId: null } });
+    }
+    action = "campaign.update_design";
+  } else {
+    const templateId = z.string().min(1).parse(formData.get("templateId"));
+    await db.campaign.update({ where: { id }, data: { templateId, customHtml: null } });
+  }
+
   await db.auditLog.create({
-    data: { userId: user.id, action: "campaign.update_template", resource: `campaign:${id}`, result: "success" },
+    data: { userId: user.id, action, resource: `campaign:${id}`, result: "success" },
   });
   revalidatePath(`/marketing/campaigns/${id}/edit`);
   redirect(`/marketing/campaigns/${id}/edit`);
@@ -197,11 +244,14 @@ export async function updateCampaignTemplate(formData: FormData) {
 export async function sendCampaignTest(campaignId: string, to: string) {
   await requireRole([Role.ADMIN, Role.MARKETER]);
   const campaign = await db.campaign.findUnique({ where: { id: campaignId }, include: { template: true } });
-  if (!campaign || !campaign.template) return { ok: false, error: "campaign or template not found" };
-  const sample = Object.fromEntries(campaign.template.variables.map((v) => [v, `sample_${v}`]));
+  const designHtml = campaign?.customHtml ?? campaign?.template?.html;
+  if (!campaign || !designHtml) return { ok: false, error: "campaign design not found" };
+  const sample = Object.fromEntries(
+    [...extractVariables(campaign.subject), ...extractVariables(designHtml)].map((v) => [v, `sample_${v}`]),
+  );
   try {
     const subject = renderTemplate(campaign.subject, sample);
-    const html = renderTemplate(campaign.template.html, sample, { sanitize: true });
+    const html = renderTemplate(designHtml, sample, { sanitize: true });
     const res = await EmailService.sendTest({
       to,
       subject,
