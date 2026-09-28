@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { PageHeader, Card, Badge } from "@/components/ui";
 import { ActionsPanel } from "./_actions-panel";
 import { CampaignStatus } from "@prisma/client";
+import { campaignListIds } from "@/server/campaigns/audience";
 
 export const dynamic = "force-dynamic";
 // Launch/resume server actions run here; the launcher self-limits to ~40s.
@@ -26,7 +27,6 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
     include: {
       template: { select: { id: true, name: true, category: true } },
       segment: { select: { id: true, name: true, audienceSize: true } },
-      list: { select: { id: true, name: true, color: true } },
     },
   });
   if (!campaign) notFound();
@@ -35,6 +35,12 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
   if (campaign.status === CampaignStatus.DRAFT) {
     redirect(`/marketing/campaigns/${campaign.id}/edit`);
   }
+  const listIds = campaignListIds(campaign);
+  const lists =
+    listIds.length > 0
+      ? await db.contactList.findMany({ where: { id: { in: listIds } }, select: { id: true, name: true } })
+      : [];
+  lists.sort((a, b) => listIds.indexOf(a.id) - listIds.indexOf(b.id));
 
   return (
     <div className="space-y-6">
@@ -72,10 +78,18 @@ export default async function CampaignDetailPage({ params }: { params: { id: str
               <Field
                 label="Audience"
                 value={
-                  campaign.list ? (
-                    <Link className="underline underline-offset-4" href={`/marketing/contacts/lists/${campaign.list.id}`}>
-                      List · {campaign.list.name}
-                    </Link>
+                  lists.length > 0 ? (
+                    <span>
+                      {lists.length === 1 ? "List" : "Lists"} ·{" "}
+                      {lists.map((l, i) => (
+                        <span key={l.id}>
+                          {i > 0 && ", "}
+                          <Link className="underline underline-offset-4" href={`/marketing/contacts/lists/${l.id}`}>
+                            {l.name}
+                          </Link>
+                        </span>
+                      ))}
+                    </span>
                   ) : campaign.segment ? (
                     <Link className="underline underline-offset-4" href={`/marketing/segments/${campaign.segment.id}`}>
                       Segment · {campaign.segment.name}

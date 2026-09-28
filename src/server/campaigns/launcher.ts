@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { ruleTreeSchema } from "@/server/segments/schema";
 import { compileWhere } from "@/server/segments/compile";
+import { campaignListIds, listsAudienceWhere } from "@/server/campaigns/audience";
 import { marketingIdempotencyKey } from "@/server/email/idempotency";
 import { checkSuppressionBulk } from "@/server/email/suppression";
 import { renderTemplate } from "@/server/email/render";
@@ -66,15 +67,17 @@ export async function launchCampaignFanout(
   });
   if (!campaign) throw new Error("Campaign not found");
   if (!campaign.template) throw new Error("Template required");
-  if (!campaign.segment && !campaign.list) throw new Error("Segment or list required");
+  const listIds = campaignListIds(campaign);
+  if (!campaign.segment && listIds.length === 0) throw new Error("Segment or list required");
   if (campaign.status === CampaignStatus.CANCELLED) return { enqueued: 0, skipped: 0, done: true };
   if (!FANOUT_STATUSES.includes(campaign.status)) {
     throw new Error(`Cannot fan out from status ${campaign.status}`);
   }
 
-  // Audience is either a Segment (compiled to a Prisma where) or a ContactList.
-  const audience: Prisma.MarketingContactWhereInput = campaign.list
-    ? { lists: { some: { listId: campaign.list.id } } }
+  // Audience is either a Segment (compiled to a Prisma where) or one or more
+  // ContactLists. Iterating contacts means someone on two lists gets one email.
+  const audience: Prisma.MarketingContactWhereInput = listIds.length > 0
+    ? listsAudienceWhere(listIds)
     : compileWhere(ruleTreeSchema.parse(campaign.segment!.rules));
 
   // First batch: flip to SENDING and freeze the template for this campaign.

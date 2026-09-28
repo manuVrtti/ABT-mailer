@@ -178,7 +178,9 @@ export default async function CampaignsPage({
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium">{c.name}</div>
                             <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
-                              {c.template?.name ?? "no template"} · {c.list?.name ?? c.segment?.name ?? "no audience"}
+                              {c.template?.name ?? "no template"} · {c.list
+                                ? `${c.list.name}${c.listIds.length > 1 ? ` +${c.listIds.length - 1} more` : ""}`
+                                : c.segment?.name ?? "no audience"}
                             </div>
                           </div>
                         </div>
