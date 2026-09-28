@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { EmailEventType, EmailType } from "@prisma/client";
 import { PageHeader } from "@/components/ui";
 import { Sparkline } from "@/components/sparkline";
+import { AutoRefresh } from "./_auto-refresh";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -62,7 +63,7 @@ export default async function RealtimePage({ searchParams }: { searchParams: { w
 
   return (
     <div>
-      <meta httpEquiv="refresh" content="20" />
+      <AutoRefresh seconds={20} />
 
       <PageHeader
         title="Real time"
