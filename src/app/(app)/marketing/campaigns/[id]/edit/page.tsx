@@ -11,8 +11,6 @@ import {
   Palette,
   Pencil,
   X,
-  ListChecks,
-  Filter,
 } from "lucide-react";
 import { CampaignStatus } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -26,6 +24,9 @@ import {
   updateCampaignTemplate,
 } from "../../actions";
 import { ActionsPanel } from "../_actions-panel";
+import { RecipientsPicker } from "./_recipients-picker";
+import { TemplatePicker } from "./_template-picker";
+import { campaignListIds, countListsAudience } from "@/server/campaigns/audience";
 
 export const dynamic = "force-dynamic";
 // Launch server action runs here; the launcher self-limits to ~40s.
@@ -56,15 +57,23 @@ export default async function CampaignEditPage({
 
   const open = normalizeOpen(searchParams.open);
 
+  const listIds = campaignListIds(campaign);
+  const [selectedLists, listsAudience] = await Promise.all([
+    listIds.length > 0
+      ? db.contactList.findMany({ where: { id: { in: listIds } }, select: { id: true, name: true } })
+      : Promise.resolve([]),
+    countListsAudience(listIds),
+  ]);
+  // Preserve the order the user picked them in.
+  selectedLists.sort((a, b) => listIds.indexOf(a.id) - listIds.indexOf(b.id));
+
   const senderReady = Boolean(campaign.fromName && campaign.fromEmail);
-  const recipientsReady = Boolean(campaign.segmentId || campaign.listId);
+  const recipientsReady = Boolean(campaign.segmentId || selectedLists.length > 0);
   const subjectReady = Boolean(campaign.subject.trim().length > 0);
   const designReady = Boolean(campaign.templateId);
   const allReady = senderReady && recipientsReady && subjectReady && designReady;
 
-  const audienceSize = campaign.list
-    ? campaign.list._count.members
-    : campaign.segment?.audienceSize ?? null;
+  const audienceSize = selectedLists.length > 0 ? listsAudience : campaign.segment?.audienceSize ?? null;
 
   return (
     <div className="space-y-6">
@@ -86,7 +95,13 @@ export default async function CampaignEditPage({
       {/* Four editable sections. */}
       <div className="space-y-3">
         <SenderSection open={open === "sender"} campaign={campaign} ready={senderReady} />
-        <RecipientsSection open={open === "recipients"} campaign={campaign} ready={recipientsReady} />
+        <RecipientsSection
+          open={open === "recipients"}
+          campaign={campaign}
+          selectedLists={selectedLists}
+          listsAudience={listsAudience}
+          ready={recipientsReady}
+        />
         <SubjectSection open={open === "subject"} campaign={campaign} ready={subjectReady} />
         <DesignSection open={open === "design"} campaign={campaign} ready={designReady} />
       </div>
@@ -306,16 +321,18 @@ function SenderSection({
 async function RecipientsSection({
   open,
   campaign,
+  selectedLists,
+  listsAudience,
   ready,
 }: {
   open: boolean;
   campaign: {
     id: string;
     segmentId: string | null;
-    listId: string | null;
-    list: { id: string; name: string; _count: { members: number } } | null;
     segment: { id: string; name: string; audienceSize: number | null } | null;
   };
+  selectedLists: { id: string; name: string }[];
+  listsAudience: number;
   ready: boolean;
 }) {
   const [lists, segments] = open
@@ -331,11 +348,12 @@ async function RecipientsSection({
       ])
     : [[], []];
 
-  const summary = campaign.list ? (
+  const summary = selectedLists.length > 0 ? (
     <span>
-      List · <b className="font-semibold">{campaign.list.name}</b> —{" "}
-      {campaign.list._count.members.toLocaleString()} contact
-      {campaign.list._count.members === 1 ? "" : "s"}
+      {selectedLists.length === 1 ? "List" : "Lists"} ·{" "}
+      <b className="font-semibold">{selectedLists.map((l) => l.name).join(", ")}</b> —{" "}
+      {listsAudience.toLocaleString()} contact{listsAudience === 1 ? "" : "s"}
+      {selectedLists.length > 1 ? " (duplicates removed)" : ""}
     </span>
   ) : campaign.segment ? (
     <span>
@@ -347,8 +365,6 @@ async function RecipientsSection({
   ) : (
     "The people who receive your campaign"
   );
-
-  const currentValue = campaign.listId ? `list:${campaign.listId}` : campaign.segmentId ? `segment:${campaign.segmentId}` : "";
 
   return (
     <SectionShell
@@ -374,82 +390,14 @@ async function RecipientsSection({
           .
         </div>
       ) : (
-        <form action={updateCampaignAudience} className="space-y-4">
-          <input type="hidden" name="id" value={campaign.id} />
-
-          {lists.length > 0 && (
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                <ListChecks className="h-3.5 w-3.5" />
-                Lists
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {lists.map((l) => {
-                  const value = `list:${l.id}`;
-                  const checked = currentValue === value;
-                  return (
-                    <label
-                      key={l.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${
-                        checked
-                          ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-500/10"
-                          : "border-border/60 hover:border-emerald-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      }`}
-                    >
-                      <input type="radio" name="audience" value={value} defaultChecked={checked} className="h-4 w-4 accent-emerald-500" required />
-                      <div>
-                        <div className="text-sm font-medium">{l.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {l._count.members.toLocaleString()} contact{l._count.members === 1 ? "" : "s"}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {segments.length > 0 && (
-            <div>
-              <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted-foreground">
-                <Filter className="h-3.5 w-3.5" />
-                Segments
-              </div>
-              <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                {segments.map((s) => {
-                  const value = `segment:${s.id}`;
-                  const checked = currentValue === value;
-                  return (
-                    <label
-                      key={s.id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-xl border p-3 transition ${
-                        checked
-                          ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-500/10"
-                          : "border-border/60 hover:border-emerald-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      }`}
-                    >
-                      <input type="radio" name="audience" value={value} defaultChecked={checked} className="h-4 w-4 accent-emerald-500" required />
-                      <div>
-                        <div className="text-sm font-medium">{s.name}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {s.audienceSize != null ? `~${s.audienceSize.toLocaleString()} contacts` : "size not computed"}
-                          {s.description ? ` · ${s.description}` : ""}
-                        </div>
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-1">
-            <Button as="a" href={`/marketing/campaigns/${campaign.id}/edit`} variant="secondary">
-              Cancel
-            </Button>
-            <Button type="submit">Save</Button>
-          </div>
+        <form action={updateCampaignAudience}>
+          <RecipientsPicker
+            campaignId={campaign.id}
+            lists={lists.map((l) => ({ id: l.id, name: l.name, members: l._count.members }))}
+            segments={segments}
+            initialListIds={selectedLists.map((l) => l.id)}
+            initialSegmentId={campaign.segmentId}
+          />
         </form>
       )}
     </SectionShell>
@@ -576,45 +524,18 @@ async function DesignSection({
           .
         </div>
       ) : (
-        <form action={updateCampaignTemplate} className="space-y-3">
-          <input type="hidden" name="id" value={campaign.id} />
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-            {templates.map((t) => {
-              const checked = campaign.templateId === t.id;
-              return (
-                <label
-                  key={t.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
-                    checked
-                      ? "border-emerald-500 bg-emerald-50/60 dark:bg-emerald-500/10"
-                      : "border-border/60 hover:border-emerald-300 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                  }`}
-                >
-                  <input type="radio" name="templateId" value={t.id} defaultChecked={checked} className="mt-1 h-4 w-4 accent-emerald-500" required />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-medium">{t.name}</div>
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                        {t.category}
-                      </span>
-                    </div>
-                    {t.previewText && (
-                      <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{t.previewText}</div>
-                    )}
-                    <div className="mt-1 text-[11px] text-muted-foreground">
-                      Updated {t.updatedAt.toISOString().slice(0, 10)}
-                    </div>
-                  </div>
-                </label>
-              );
-            })}
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <Button as="a" href={`/marketing/campaigns/${campaign.id}/edit`} variant="secondary">
-              Cancel
-            </Button>
-            <Button type="submit">Save</Button>
-          </div>
+        <form action={updateCampaignTemplate}>
+          <TemplatePicker
+            campaignId={campaign.id}
+            selectedId={campaign.templateId}
+            templates={templates.map((t) => ({
+              id: t.id,
+              name: t.name,
+              category: t.category,
+              previewText: t.previewText,
+              updated: t.updatedAt.toISOString().slice(0, 10),
+            }))}
+          />
         </form>
       )}
     </SectionShell>

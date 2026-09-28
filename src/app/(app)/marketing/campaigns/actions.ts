@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { computeAudience } from "@/server/segments/compile";
 import { ruleTreeSchema } from "@/server/segments/schema";
+import { campaignListIds, countListsAudience } from "@/server/campaigns/audience";
 import { renderTemplate } from "@/server/email/render";
 import { EmailService } from "@/server/email";
 import { getServerEnv } from "@/lib/env";
@@ -72,6 +73,7 @@ export async function createDraftCampaign(formData: FormData) {
       replyTo: env.SES_REPLY_TO ?? null,
       segmentId,
       listId,
+      listIds: listId ? [listId] : [],
       status: CampaignStatus.DRAFT,
       createdById: user.id,
     },
@@ -122,23 +124,31 @@ export async function updateCampaignSender(formData: FormData) {
   redirect(`/marketing/campaigns/${id}/edit`);
 }
 
-// Recipients section (list OR segment — same as before).
-const audienceSchema = z.object({
-  audience: z.string().regex(/^(segment|list):.+$/),
-});
-
+// Recipients section: one or more lists, OR a single segment.
 export async function updateCampaignAudience(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
-  const parsed = audienceSchema.parse({ audience: formData.get("audience") });
-  const [kind, refId] = parsed.audience.split(":") as ["segment" | "list", string];
-  await db.campaign.update({
-    where: { id },
-    data: {
-      segmentId: kind === "segment" ? refId : null,
-      listId: kind === "list" ? refId : null,
-    },
-  });
+  const requestedListIds = Array.from(new Set(formData.getAll("listIds").map(String).filter(Boolean)));
+  const segmentId = String(formData.get("segmentId") ?? "") || null;
+
+  let data: { segmentId: string | null; listId: string | null; listIds: string[] };
+  if (requestedListIds.length > 0) {
+    // Keep the user's selection order; drop ids that no longer exist.
+    const found = await db.contactList.findMany({
+      where: { id: { in: requestedListIds } },
+      select: { id: true },
+    });
+    const valid = new Set(found.map((l) => l.id));
+    const listIds = requestedListIds.filter((l) => valid.has(l));
+    if (listIds.length === 0) throw new Error("Selected lists no longer exist");
+    data = { segmentId: null, listId: listIds[0] ?? null, listIds };
+  } else if (segmentId) {
+    data = { segmentId, listId: null, listIds: [] };
+  } else {
+    throw new Error("Select at least one list or a segment");
+  }
+
+  await db.campaign.update({ where: { id }, data });
   await db.auditLog.create({
     data: { userId: user.id, action: "campaign.update_audience", resource: `campaign:${id}`, result: "success" },
   });
@@ -219,8 +229,9 @@ export async function estimateCampaign(campaignId: string) {
   });
   if (!campaign) return { ok: false as const, error: "campaign not found" };
 
-  if (campaign.listId) {
-    const matching = await db.contactListMember.count({ where: { listId: campaign.listId } });
+  const listIds = campaignListIds(campaign);
+  if (listIds.length > 0) {
+    const matching = await countListsAudience(listIds);
     const cost = (matching / 1000) * env.SES_COST_PER_THOUSAND_USD;
     return {
       ok: true as const,

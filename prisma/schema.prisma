@@ -373,7 +373,10 @@ model Campaign {
   status         CampaignStatus @default(DRAFT)
   templateId     String?        @map("template_id")
   segmentId      String?        @map("segment_id")
+  // First selected list (kept for display/back-compat); listIds holds every
+  // selected list. Older campaigns have listId set and listIds empty.
   listId         String?        @map("list_id")
+  listIds        String[]       @default([]) @map("list_ids")
 
   scheduledAt    DateTime?      @map("scheduled_at")
   startedAt      DateTime?      @map("started_at")
