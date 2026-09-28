@@ -269,9 +269,9 @@ export const EmailService = {
         // (see launcher) instead of being stored per job.
         const camp = await db.campaign.findUnique({
           where: { id: job.campaignId },
-          select: { slug: true, htmlSnapshot: true, template: { select: { html: true } } },
+          select: { slug: true, htmlSnapshot: true, customHtml: true, template: { select: { html: true } } },
         });
-        const templateHtml = camp?.htmlSnapshot ?? camp?.template?.html;
+        const templateHtml = camp?.htmlSnapshot ?? camp?.customHtml ?? camp?.template?.html;
         if (!camp || !templateHtml) throw new ProviderError("permanent", "campaign template missing");
         html = renderCampaignHtml(templateHtml, (job.variables ?? {}) as Record<string, string>, {
           email: job.recipientEmail,

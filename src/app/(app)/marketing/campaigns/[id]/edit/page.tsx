@@ -21,11 +21,11 @@ import {
   updateCampaignSender,
   updateCampaignAudience,
   updateCampaignSubject,
-  updateCampaignTemplate,
+  updateCampaignDesign,
 } from "../../actions";
 import { ActionsPanel } from "../_actions-panel";
 import { RecipientsPicker } from "./_recipients-picker";
-import { TemplatePicker } from "./_template-picker";
+import { DesignStudio } from "./_design-studio";
 import { campaignListIds, countListsAudience } from "@/server/campaigns/audience";
 
 export const dynamic = "force-dynamic";
@@ -70,7 +70,7 @@ export default async function CampaignEditPage({
   const senderReady = Boolean(campaign.fromName && campaign.fromEmail);
   const recipientsReady = Boolean(campaign.segmentId || selectedLists.length > 0);
   const subjectReady = Boolean(campaign.subject.trim().length > 0);
-  const designReady = Boolean(campaign.templateId);
+  const designReady = Boolean(campaign.templateId || campaign.customHtml);
   const allReady = senderReady && recipientsReady && subjectReady && designReady;
 
   const audienceSize = selectedLists.length > 0 ? listsAudience : campaign.segment?.audienceSize ?? null;
@@ -485,6 +485,7 @@ async function DesignSection({
   campaign: {
     id: string;
     templateId: string | null;
+    customHtml: string | null;
     template: { id: string; name: string; category: string } | null;
   };
   ready: boolean;
@@ -492,13 +493,17 @@ async function DesignSection({
   const templates = open
     ? await db.emailTemplate.findMany({
         orderBy: { updatedAt: "desc" },
-        select: { id: true, name: true, category: true, previewText: true, updatedAt: true },
+        select: { id: true, name: true, category: true, previewText: true, updatedAt: true, html: true },
       })
     : [];
 
   const summary = campaign.template ? (
     <span>
       Template · <b className="font-semibold">{campaign.template.name}</b> ({campaign.template.category})
+    </span>
+  ) : campaign.customHtml ? (
+    <span>
+      <b className="font-semibold">Custom HTML</b> design for this campaign
     </span>
   ) : (
     "Create your email content."
@@ -511,33 +516,25 @@ async function DesignSection({
       icon={<Palette className="h-4 w-4" />}
       title="Design"
       description={summary}
-      cta={ready ? "Change template" : "Start designing"}
+      cta={ready ? "Edit design" : "Start designing"}
       ctaHref={`/marketing/campaigns/${campaign.id}/edit?open=design`}
       campaignId={campaign.id}
     >
-      {templates.length === 0 ? (
-        <div className="text-sm text-muted-foreground">
-          No templates yet.{" "}
-          <Link href="/marketing/templates/new" className="text-emerald-600 underline underline-offset-4">
-            Create a template
-          </Link>
-          .
-        </div>
-      ) : (
-        <form action={updateCampaignTemplate}>
-          <TemplatePicker
-            campaignId={campaign.id}
-            selectedId={campaign.templateId}
-            templates={templates.map((t) => ({
-              id: t.id,
-              name: t.name,
-              category: t.category,
-              previewText: t.previewText,
-              updated: t.updatedAt.toISOString().slice(0, 10),
-            }))}
-          />
-        </form>
-      )}
+      <form action={updateCampaignDesign}>
+        <DesignStudio
+          campaignId={campaign.id}
+          selectedTemplateId={campaign.templateId}
+          initialHtml={campaign.customHtml}
+          templates={templates.map((t) => ({
+            id: t.id,
+            name: t.name,
+            category: t.category,
+            previewText: t.previewText,
+            updated: t.updatedAt.toISOString().slice(0, 10),
+            html: t.html,
+          }))}
+        />
+      </form>
     </SectionShell>
   );
 }
