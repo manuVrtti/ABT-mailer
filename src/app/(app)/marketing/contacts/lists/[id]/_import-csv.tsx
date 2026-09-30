@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import Papa from "papaparse";
+import { readSheet, type CellValue } from "read-excel-file/browser";
 import { FileSpreadsheet, Upload, CheckCircle2, AlertTriangle, X } from "lucide-react";
 import { Card, Button } from "@/components/ui";
 import {
@@ -14,6 +15,15 @@ import {
   type ExtractedContact,
 } from "@/lib/csv-columns";
 import { importCsvToList, type ListImportResult } from "../actions";
+
+const XLSX_RE = /\.xlsx$/i;
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function cellToString(v: CellValue | null): string {
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) return v.toISOString().slice(0, 10);
+  return String(v).trim();
+}
 
 type Preview = {
   file: File;
@@ -38,40 +48,58 @@ export function ImportCsvPanel({ listId }: { listId: string }) {
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  function handleFile(file: File | undefined) {
+  function buildPreview(file: File, allRows: string[][]) {
+    const rows = allRows.filter((r) => r.some((c) => c?.trim()));
+    if (rows.length === 0) {
+      setError("The file is empty.");
+      return;
+    }
+    const headerless = isHeaderless(rows[0]!);
+    const header = headerless ? [] : rows[0]!;
+    const dataRows = headerless ? rows : rows.slice(1);
+    const mapping = detectColumns(header, dataRows.slice(0, 50));
+    if (mapping.email === undefined) {
+      setError("Couldn't find an email column. Add a header named “email” and try again.");
+      return;
+    }
+    const extracted = dataRows.map((r) => extractContact(r, mapping)).filter(Boolean) as ExtractedContact[];
+    setPreview({
+      file,
+      header,
+      mapping,
+      sample: extracted.slice(0, 5),
+      validCount: new Set(extracted.map((c) => c.email)).size,
+      totalRows: dataRows.length,
+    });
+  }
+
+  async function handleFile(file: File | undefined) {
     setResult(null);
     setError(null);
     if (!file) return;
+
+    if (XLSX_RE.test(file.name) || file.type === XLSX_MIME) {
+      // Excel: read the first sheet in the browser and hand the server a CSV,
+      // so the import action only ever deals with one format.
+      try {
+        const sheet = await readSheet(file);
+        const rows = sheet.map((r) => r.map(cellToString));
+        const csvName = file.name.replace(XLSX_RE, "") + ".csv";
+        const csvFile = new File([Papa.unparse(rows)], csvName, { type: "text/csv" });
+        buildPreview(csvFile, rows);
+      } catch {
+        setError("Couldn't read that Excel file. Make sure it's a .xlsx workbook (not .xls).");
+      }
+      return;
+    }
+
     if (!/\.csv$/i.test(file.name) && file.type !== "text/csv") {
-      setError("Please choose a .csv file (in Excel/Sheets: File → Download → CSV).");
+      setError("Please choose a .csv or .xlsx file.");
       return;
     }
     Papa.parse<string[]>(file, {
       skipEmptyLines: "greedy",
-      complete: (res) => {
-        const rows = res.data.filter((r) => r.some((c) => c?.trim()));
-        if (rows.length === 0) {
-          setError("The CSV is empty.");
-          return;
-        }
-        const headerless = isHeaderless(rows[0]!);
-        const header = headerless ? [] : rows[0]!;
-        const dataRows = headerless ? rows : rows.slice(1);
-        const mapping = detectColumns(header, dataRows.slice(0, 50));
-        if (mapping.email === undefined) {
-          setError("Couldn't find an email column. Add a header named “email” and try again.");
-          return;
-        }
-        const extracted = dataRows.map((r) => extractContact(r, mapping)).filter(Boolean) as ExtractedContact[];
-        setPreview({
-          file,
-          header,
-          mapping,
-          sample: extracted.slice(0, 5),
-          validCount: new Set(extracted.map((c) => c.email)).size,
-          totalRows: dataRows.length,
-        });
-      },
+      complete: (res) => buildPreview(file, res.data),
       error: () => setError("Couldn't read that file."),
     });
   }
@@ -99,7 +127,7 @@ export function ImportCsvPanel({ listId }: { listId: string }) {
           <FileSpreadsheet className="h-5 w-5" />
         </div>
         <div>
-          <div className="text-sm font-medium">Import contacts from CSV</div>
+          <div className="text-sm font-medium">Import contacts from CSV or Excel</div>
           <div className="text-[11px] text-muted-foreground">
             We detect the email and name columns automatically, create any new contacts, and add everyone to this list.
           </div>
@@ -125,14 +153,14 @@ export function ImportCsvPanel({ listId }: { listId: string }) {
           }`}
         >
           <Upload className="h-6 w-6 text-emerald-600" />
-          <div className="text-sm font-medium">Drop a CSV here, or click to choose</div>
+          <div className="text-sm font-medium">Drop a CSV or Excel (.xlsx) file here, or click to choose</div>
           <div className="text-xs text-muted-foreground">
-            Needs an email column. Name can be one “Name” column or separate First / Last name columns.
+            Needs an email column (Excel: first sheet is used). Name can be one “Name” column or separate First / Last name columns.
           </div>
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept={`.csv,text/csv,.xlsx,${XLSX_MIME}`}
             className="hidden"
             onChange={(e) => handleFile(e.target.files?.[0])}
           />
