@@ -39,6 +39,7 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-email-editor": "^1.7.11",
+    "read-excel-file": "^9.3.10",
     "sanitize-html": "^2.17.5",
     "sns-validator": "^0.3.5",
     "tailwind-merge": "^2.5.2",
