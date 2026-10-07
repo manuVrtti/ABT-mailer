@@ -110,7 +110,22 @@ export function ImportCsvPanel({ listId }: { listId: string }) {
     fd.set("listId", listId);
     fd.set("file", preview.file);
     start(async () => {
-      const res = await importCsvToList(fd);
+      let res: ListImportResult | undefined;
+      try {
+        res = await importCsvToList(fd);
+      } catch {
+        res = undefined;
+      }
+      // A gateway timeout makes the action resolve to undefined (or throw)
+      // instead of returning a result — don't crash the page over it.
+      if (!res) {
+        setResult({
+          ok: false,
+          error:
+            "The import took too long and the server stopped waiting. Some contacts may already be added — refresh the page to check, then upload the file again to finish.",
+        });
+        return;
+      }
       setResult(res);
       if (res.ok) reset();
     });
