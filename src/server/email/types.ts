@@ -101,6 +101,20 @@ export interface QueueTransactionalEmailInput {
   overrides?: { fromName?: string; fromEmail?: string; replyTo?: string };
 }
 
+/**
+ * Transactional email whose content the caller already rendered (the ABTalks
+ * app builds its own HTML). No template or event rule is involved; eventType
+ * is only a label for logs and filtering.
+ */
+export interface QueueRawTransactionalEmailInput {
+  eventType: string;
+  eventId: string;
+  recipient: { email: string; registeredUserRefId?: string; contactId?: string };
+  content: { subject: string; html: string; text?: string; headers?: Record<string, string> };
+  category: "TRANSACTIONAL_NONESSENTIAL" | "TRANSACTIONAL_ESSENTIAL";
+  overrides?: { fromName?: string; fromEmail?: string; replyTo?: string };
+}
+
 export interface EnqueueResult {
   jobId: string;
   status: "enqueued" | "duplicate" | "suppressed" | "invalid";

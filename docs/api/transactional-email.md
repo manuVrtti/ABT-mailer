@@ -45,6 +45,29 @@ Rules:
 - `recipient.email` is normalized server-side (lowercased, trimmed).
 - `overrides` are optional. Leave them out to use the defaults from `SES_FROM_EMAIL` / `SES_FROM_NAME`.
 
+## Raw mode — send content you already rendered
+
+If the caller builds its own HTML (the ABTalks app does), send `content` instead of `variables`. No event rule or template is needed; `eventType` is just a label for logs.
+
+```json
+{
+  "eventType": "profile.viewed",
+  "eventId": "<stable id — the same on every retry>",
+  "recipient": { "email": "student@example.in" },
+  "content": {
+    "subject": "You're getting noticed",
+    "html": "<!doctype html>…",
+    "text": "…",
+    "headers": { "List-Unsubscribe": "<mailto:team@abtalks.in?subject=Unsubscribe>" }
+  },
+  "category": "TRANSACTIONAL_NONESSENTIAL"
+}
+```
+
+- `category` defaults to `TRANSACTIONAL_NONESSENTIAL`. Use `TRANSACTIONAL_ESSENTIAL` only for OTP / password reset / security mail (only a hard bounce blocks it).
+- Only these `headers` are kept: `List-Unsubscribe`, `List-Unsubscribe-Post`, `X-Entity-Ref-ID`, `Importance`, `X-Priority`, `Priority`, `In-Reply-To`, `References`. Others are dropped.
+- Idempotency is per `(eventId, eventType, email)`.
+
 ## Responses
 
 Every successful call returns `200`. Read `status` — do not treat `200` alone as "sent".
@@ -110,4 +133,5 @@ await fetch(url, {
 | `400 invalid: missing_variable:xxx`           | Send the required variable.                                      |
 | `400 bad_body`                                 | Client bug. Log and fix.                                         |
 | `401 unauthorized`                             | Check clock skew, secret, or signature computation.              |
+| `503 retry`                                    | Saved but not queued yet. Retry with the **same** `eventId`.     |
 | `5xx`                                          | Retry with exponential backoff.                                  |
