@@ -18,6 +18,12 @@ describe("detectColumns", () => {
     expect(m.firstName).toBe(1);
   });
 
+  it("does not map a 'Full Name' column as the last name", () => {
+    const m = detectColumns(["First Name", "Full Name", "Email"], []);
+    expect(m).toMatchObject({ firstName: 0, fullName: 1, email: 2 });
+    expect(m.lastName).toBeUndefined();
+  });
+
   it("sniffs the email column when the header is unrecognised", () => {
     const m = detectColumns(["Contact", "Whatever"], [["Asha", "asha@x.com"], ["Ravi", "ravi@y.in"]]);
     expect(m.email).toBe(1);
@@ -28,6 +34,15 @@ describe("extractContact", () => {
   it("splits a full name into first and last", () => {
     const c = extractContact(["Suyash Kumar Gupta", "SUYASH@Gmail.com "], { fullName: 0, email: 1 });
     expect(c).toMatchObject({ email: "suyash@gmail.com", firstName: "Suyash", lastName: "Kumar Gupta" });
+  });
+
+  it("takes the last name from a full name that repeats the first name", () => {
+    const m = { firstName: 0, fullName: 1, email: 2 };
+    expect(extractContact(["jahanvi", "jahanvi pratap", "j@x.com"], m)).toMatchObject({
+      firstName: "jahanvi",
+      lastName: "pratap",
+    });
+    expect(extractContact(["Deepanshu", "Deepanshu", "d@x.com"], m)?.lastName).toBeUndefined();
   });
 
   it("returns null for rows without a valid email", () => {
