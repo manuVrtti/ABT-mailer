@@ -189,12 +189,36 @@ export async function importCsvToList(formData: FormData): Promise<ListImportRes
     }
 
     const toUpdate = chunk.filter((c) => existingSet.has(c.email) && Object.keys(stripUndefined(c)).length > 1);
-    for (let j = 0; j < toUpdate.length; j += 50) {
-      await db.$transaction(
-        toUpdate.slice(j, j + 50).map(({ email, ...fields }) =>
-          db.marketingContact.update({ where: { email }, data: stripUndefined(fields) }),
-        ),
+    if (toUpdate.length > 0) {
+      // One UPDATE for the whole chunk — per-row updates took >60s for a few
+      // thousand existing contacts and timed the request out. Blank CSV cells
+      // keep the stored value.
+      const payload = JSON.stringify(
+        toUpdate.map((c) => {
+          const f = stripUndefined(c);
+          return {
+            email: c.email,
+            first_name: f.firstName ?? null,
+            last_name: f.lastName ?? null,
+            phone: f.phone ?? null,
+            college: f.college ?? null,
+            branch: f.branch ?? null,
+            year: f.year ?? null,
+          };
+        }),
       );
+      await db.$executeRaw`
+        UPDATE marketing_contacts AS m SET
+          first_name = COALESCE(v.first_name, m.first_name),
+          last_name  = COALESCE(v.last_name, m.last_name),
+          phone      = COALESCE(v.phone, m.phone),
+          college    = COALESCE(v.college, m.college),
+          branch     = COALESCE(v.branch, m.branch),
+          "year"     = COALESCE(v."year", m."year"),
+          updated_at = now()
+        FROM jsonb_to_recordset(${payload}::jsonb)
+          AS v(email text, first_name text, last_name text, phone text, college text, branch text, "year" text)
+        WHERE m.email = v.email`;
     }
     updated += toUpdate.length;
   }
