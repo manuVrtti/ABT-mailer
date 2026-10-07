@@ -21,6 +21,7 @@ import type {
   EnqueueResult,
   ProviderEvent,
   QueueMarketingEmailInput,
+  QueueRawTransactionalEmailInput,
   QueueTransactionalEmailInput,
 } from "@/server/email/types";
 
@@ -161,6 +162,58 @@ export const EmailService = {
   },
 
   /**
+   * Transactional enqueue for content the caller rendered itself. Same
+   * idempotency and suppression rules as the template path; the caller's
+   * headers (allowlisted) are kept on the job and sent with it.
+   */
+  async queueRawTransactionalEmail(input: QueueRawTransactionalEmailInput): Promise<EnqueueResult> {
+    const email = normalizeEmail(input.recipient.email);
+    if (!isValidEmail(email)) return { jobId: "", status: "invalid", reason: "invalid_email_format" };
+
+    const category = EmailCategory[input.category];
+    const suppression = await checkSuppression(email, category);
+    if (!suppression.allowed) {
+      return { jobId: "", status: "suppressed", reason: suppression.reason };
+    }
+
+    const env = getServerEnv();
+    const idempotencyKey = transactionalIdempotencyKey(input.eventId, `raw:${input.eventType}`, email);
+    const headers = pickAllowedHeaders(input.content.headers);
+
+    try {
+      const job = await db.emailJob.create({
+        data: {
+          idempotencyKey,
+          emailType: EmailType.TRANSACTIONAL,
+          category,
+          status: EmailJobStatus.PENDING,
+          recipientEmail: email,
+          registeredUserRefId: input.recipient.registeredUserRefId,
+          contactId: input.recipient.contactId,
+          eventType: input.eventType,
+          eventId: input.eventId,
+          subject: input.content.subject,
+          fromEmail: input.overrides?.fromEmail ?? env.SES_FROM_EMAIL,
+          fromName: input.overrides?.fromName ?? env.SES_FROM_NAME,
+          replyTo: input.overrides?.replyTo ?? env.SES_REPLY_TO,
+          // No template variables on this path; the column holds the headers.
+          variables: { [RAW_HEADERS_KEY]: headers } as Prisma.InputJsonValue,
+          renderedHtml: input.content.html,
+          renderedText: input.content.text,
+        },
+        select: { id: true },
+      });
+      return { jobId: job.id, status: "enqueued" };
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        const existing = await db.emailJob.findUnique({ where: { idempotencyKey }, select: { id: true } });
+        return { jobId: existing?.id ?? "", status: "duplicate", reason: "idempotency_key_exists" };
+      }
+      throw err;
+    }
+  },
+
+  /**
    * One-shot test send that bypasses the queue. Only for admin-driven "send
    * test" buttons on templates and campaigns. Does not create suppression, does
    * not create an EmailJob idempotency row, does not touch analytics.
@@ -261,6 +314,9 @@ export const EmailService = {
     if (listUnsub) {
       headers["List-Unsubscribe"] = `<${listUnsub}>`;
       headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+    }
+    if (job.emailType === EmailType.TRANSACTIONAL) {
+      Object.assign(headers, storedRawHeaders(job.variables));
     }
     try {
       let html = job.renderedHtml;
@@ -424,6 +480,36 @@ export const EmailService = {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+const RAW_HEADERS_KEY = "__headers";
+
+// Headers a caller may set on a raw send. Anything else (From, To, Subject,
+// DKIM, ...) is ours or SES's to set.
+const ALLOWED_RAW_HEADERS = new Set([
+  "list-unsubscribe",
+  "list-unsubscribe-post",
+  "x-entity-ref-id",
+  "importance",
+  "x-priority",
+  "priority",
+  "in-reply-to",
+  "references",
+]);
+
+function pickAllowedHeaders(headers: Record<string, string> | undefined): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, value] of Object.entries(headers ?? {})) {
+    if (ALLOWED_RAW_HEADERS.has(name.toLowerCase()) && !/[\r\n]/.test(value)) out[name] = value;
+  }
+  return out;
+}
+
+function storedRawHeaders(variables: Prisma.JsonValue): Record<string, string> {
+  if (!variables || typeof variables !== "object" || Array.isArray(variables)) return {};
+  const stored = (variables as Record<string, unknown>)[RAW_HEADERS_KEY];
+  if (!stored || typeof stored !== "object" || Array.isArray(stored)) return {};
+  return pickAllowedHeaders(stored as Record<string, string>);
+}
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function isValidEmail(s: string): boolean {
