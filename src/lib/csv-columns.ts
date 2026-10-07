@@ -37,18 +37,25 @@ export type ColumnMapping = Partial<Record<ContactField, number>>;
 export function detectColumns(header: string[], sampleRows: string[][]): ColumnMapping {
   const mapping: ColumnMapping = {};
   const normalized = header.map(norm);
+  const fields = Object.keys(HEADER_ALIASES) as ContactField[];
+  const taken = (i: number) => Object.values(mapping).includes(i);
+  const exactAlias = new Set(Object.values(HEADER_ALIASES).flat());
 
-  (Object.keys(HEADER_ALIASES) as ContactField[]).forEach((field) => {
-    const aliases = HEADER_ALIASES[field];
-    let idx = normalized.findIndex((h) => aliases.includes(h));
-    // Looser match: "Student Email ID", "Candidate First Name", ...
-    if (idx === -1 && field !== "fullName") {
-      idx = normalized.findIndex(
-        (h, i) => !Object.values(mapping).includes(i) && aliases.some((a) => a.length > 3 && h.includes(a)),
-      );
-    }
-    if (idx !== -1 && !Object.values(mapping).includes(idx)) mapping[field] = idx;
-  });
+  // Exact header matches first, for every field — otherwise a loose match can
+  // steal another field's column ("Full Name" contains "lname").
+  for (const field of fields) {
+    const idx = normalized.findIndex((h, i) => !taken(i) && HEADER_ALIASES[field].includes(h));
+    if (idx !== -1) mapping[field] = idx;
+  }
+  // Looser match: "Student Email ID", "Candidate First Name", ... Never on a
+  // header that is exactly some other field's name.
+  for (const field of fields) {
+    if (mapping[field] !== undefined || field === "fullName") continue;
+    const idx = normalized.findIndex(
+      (h, i) => !taken(i) && !exactAlias.has(h) && HEADER_ALIASES[field].some((a) => a.length > 3 && h.includes(a)),
+    );
+    if (idx !== -1) mapping[field] = idx;
+  }
 
   if (mapping.email === undefined) {
     const width = Math.max(header.length, ...sampleRows.map((r) => r.length));
@@ -95,6 +102,12 @@ export function extractContact(row: string[], mapping: ColumnMapping): Extracted
     const parts = fullName.split(/\s+/);
     firstName = parts[0];
     if (!lastName && parts.length > 1) lastName = parts.slice(1).join(" ");
+  } else if (fullName && firstName && !lastName) {
+    // First Name + Full Name columns: last name is what follows the first name.
+    const rest = fullName.toLowerCase().startsWith(firstName.toLowerCase() + " ")
+      ? fullName.slice(firstName.length).trim()
+      : "";
+    if (rest) lastName = rest;
   }
 
   return {
