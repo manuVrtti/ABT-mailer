@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { EmailJobStatus } from "@prisma/client";
+import { EmailCategory, EmailJobStatus } from "@prisma/client";
 import { z } from "zod";
 import { EmailService } from "@/server/email";
 import { verifyHmac } from "@/server/auth/hmac";
@@ -112,6 +112,8 @@ export async function POST(req: Request) {
     return NextResponse.json(result, { status: 400 });
   }
 
+  if (result.status === "enqueued") await sendEssentialNow(result.jobId);
+
   if ((result.status === "enqueued" || result.status === "duplicate") && !(await ensureQueued(result.jobId))) {
     // The job is saved but not on the queue. Tell the caller to retry: the
     // retry comes back as "duplicate" and is queued then. Answering 200 here
@@ -120,6 +122,24 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json(result, { status: 200 });
+}
+
+/**
+ * Essential mail (sign-in / password codes, resets, account notices) is sent
+ * to SES right here instead of waiting for the queue: the queue hop wakes a
+ * cold worker and took 3–18 s, which is too slow for a code someone is
+ * waiting on. If this send fails, the job is left PENDING (retryable) or
+ * FAILED (permanent) by deliverJob, and ensureQueued picks up the PENDING
+ * case, so the queue stays the safety net.
+ */
+async function sendEssentialNow(jobId: string): Promise<void> {
+  const job = await db.emailJob.findUnique({ where: { id: jobId }, select: { category: true } });
+  if (job?.category !== EmailCategory.TRANSACTIONAL_ESSENTIAL) return;
+  try {
+    await EmailService.deliverJob(jobId);
+  } catch (err) {
+    logger.warn({ err: (err as Error).message, jobId }, "transactional.inline_send.failed_falling_back_to_queue");
+  }
 }
 
 /**
