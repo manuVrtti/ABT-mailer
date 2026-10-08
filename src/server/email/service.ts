@@ -197,7 +197,10 @@ export const EmailService = {
           fromName: input.overrides?.fromName ?? env.SES_FROM_NAME,
           replyTo: input.overrides?.replyTo ?? env.SES_REPLY_TO,
           // No template variables on this path; the column holds the headers.
-          variables: { [RAW_HEADERS_KEY]: headers } as Prisma.InputJsonValue,
+          variables: {
+            [RAW_HEADERS_KEY]: headers,
+            ...(input.sensitive ? { [RAW_SENSITIVE_KEY]: true } : {}),
+          } as Prisma.InputJsonValue,
           renderedHtml: input.content.html,
           renderedText: input.content.text,
         },
@@ -281,7 +284,12 @@ export const EmailService = {
     if (!suppression.allowed) {
       await db.emailJob.update({
         where: { id: job.id },
-        data: { status: EmailJobStatus.SKIPPED, errorCode: "suppressed", errorMessage: suppression.reason },
+        data: {
+          status: EmailJobStatus.SKIPPED,
+          errorCode: "suppressed",
+          errorMessage: suppression.reason,
+          ...(isSensitive(job.variables) ? WIPED_CONTENT : {}),
+        },
       });
       if (job.campaignId) {
         // Await so the promise completes before the serverless function is
@@ -361,6 +369,7 @@ export const EmailService = {
             providerMessageId: result.providerMessageId,
             errorCode: null,
             errorMessage: null,
+            ...(isSensitive(job.variables) ? WIPED_CONTENT : {}),
           },
         }),
         db.emailLog.create({
@@ -397,6 +406,8 @@ export const EmailService = {
           status: retryable ? EmailJobStatus.PENDING : EmailJobStatus.FAILED,
           errorCode: providerErr.code ?? providerErr.kind,
           errorMessage: providerErr.message,
+          // A retry still needs the content; a permanent failure does not.
+          ...(!retryable && isSensitive(job.variables) ? WIPED_CONTENT : {}),
         },
       });
       await db.emailLog.create({
@@ -482,6 +493,16 @@ export const EmailService = {
 // ---------------------------------------------------------------------------
 
 const RAW_HEADERS_KEY = "__headers";
+const RAW_SENSITIVE_KEY = "__sensitive";
+
+// What a sensitive job (one-time codes, passwords, reset links) keeps once it
+// is done: no subject, no body. The row, status and timings stay for logs.
+const WIPED_CONTENT = { subject: "[redacted after send]", renderedHtml: null, renderedText: null };
+
+function isSensitive(variables: Prisma.JsonValue): boolean {
+  if (!variables || typeof variables !== "object" || Array.isArray(variables)) return false;
+  return (variables as Record<string, unknown>)[RAW_SENSITIVE_KEY] === true;
+}
 
 // Headers a caller may set on a raw send. Anything else (From, To, Subject,
 // DKIM, ...) is ours or SES's to set.

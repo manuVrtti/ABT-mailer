@@ -112,6 +112,8 @@ export interface QueueRawTransactionalEmailInput {
   recipient: { email: string; registeredUserRefId?: string; contactId?: string };
   content: { subject: string; html: string; text?: string; headers?: Record<string, string> };
   category: "TRANSACTIONAL_NONESSENTIAL" | "TRANSACTIONAL_ESSENTIAL";
+  /** Content holds a secret (code, password, reset link): wiped once sent. */
+  sensitive?: boolean;
   overrides?: { fromName?: string; fromEmail?: string; replyTo?: string };
 }
 

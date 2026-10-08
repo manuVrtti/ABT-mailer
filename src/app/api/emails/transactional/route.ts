@@ -44,6 +44,7 @@ const rawSchema = z.object({
     headers: z.record(z.string().max(2000)).optional(),
   }),
   category: z.enum(["TRANSACTIONAL_NONESSENTIAL", "TRANSACTIONAL_ESSENTIAL"]).default("TRANSACTIONAL_NONESSENTIAL"),
+  sensitive: z.boolean().default(false),
 });
 
 /**

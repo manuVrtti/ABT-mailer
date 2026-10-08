@@ -67,6 +67,7 @@ If the caller builds its own HTML (the ABTalks app does), send `content` instead
 - `category` defaults to `TRANSACTIONAL_NONESSENTIAL`. Use `TRANSACTIONAL_ESSENTIAL` only for OTP / password reset / security mail (only a hard bounce blocks it).
 - Only these `headers` are kept: `List-Unsubscribe`, `List-Unsubscribe-Post`, `X-Entity-Ref-ID`, `Importance`, `X-Priority`, `Priority`, `In-Reply-To`, `References`. Others are dropped.
 - Idempotency is per `(eventId, eventType, email)`.
+- `"sensitive": true` for mail that contains a secret (one-time code, password, reset link): once the job is sent, skipped or permanently failed, its subject and body are wiped from the database. Status, timings and delivery events are kept.
 
 ## Responses
 
