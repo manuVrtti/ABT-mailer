@@ -8,6 +8,7 @@ import { renderCampaignHtml } from "@/server/campaigns/launcher";
 import { eventDetail, type LogEvent } from "@/server/logs/query";
 import { EventPill, fmtIst } from "../_shared";
 import { LogActions } from "../_log-actions";
+import { LiveToggle } from "../_live";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Email log" };
@@ -112,7 +113,10 @@ export default async function EmailLogDetailPage({ params }: { params: { jobId: 
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h1 className="text-2xl font-semibold">{job.subject}</h1>
-        <LogActions jobId={job.id} canDelete={!job.campaignId} />
+        <div className="flex items-start gap-3">
+          <LiveToggle />
+          <LogActions jobId={job.id} canDelete={!job.campaignId} />
+        </div>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_380px]">
@@ -129,8 +133,8 @@ export default async function EmailLogDetailPage({ params }: { params: { jobId: 
           {wiped ? (
             <div className="flex items-start gap-2 rounded-xl bg-slate-50 p-4 text-sm text-muted-foreground dark:bg-slate-800/50">
               <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-              This email held a one-time code, reset link or password. Its content was wiped after sending, so there is
-              nothing to preview.
+              This email was marked sensitive (a password or reset link, or a code sent before codes were kept), so its
+              content was wiped after sending and there is nothing to preview.
             </div>
           ) : html ? (
             <iframe
