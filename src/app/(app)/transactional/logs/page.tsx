@@ -1,104 +1,156 @@
-import { db } from "@/lib/db";
-import { EmailJobStatus, EmailType } from "@prisma/client";
-import { PageHeader, Table, THead, TR, TH, TD, Badge, EmptyState, Input } from "@/components/ui";
+import Link from "next/link";
+import { Download, Eye, RefreshCw, ScrollText } from "lucide-react";
+import { PageHeader, Table, THead, TR, TH, TD, EmptyState, Button } from "@/components/ui";
+import { LOG_EVENTS, LOG_EVENT_LABEL, parseLogFilters, queryEmailLogs, type LogFilters } from "@/server/logs/query";
+import { EventPill, fmtIst } from "./_shared";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Delivery logs" };
+export const metadata = { title: "Logs" };
 
-const statusTone: Record<EmailJobStatus, "muted" | "success" | "warning" | "destructive" | "info"> = {
-  PENDING: "muted",
-  QUEUED: "muted",
-  SENDING: "info",
-  SENT: "success",
-  DELIVERED: "success",
-  BOUNCED: "destructive",
-  COMPLAINED: "destructive",
-  FAILED: "destructive",
-  SKIPPED: "warning",
-};
+const PAGE_SIZE = 50;
 
-export default async function DeliveryLogsPage({
-  searchParams,
-}: {
-  searchParams: { q?: string; event?: string; template?: string; status?: string };
-}) {
-  const q = searchParams.q?.trim();
-  const jobs = await db.emailJob.findMany({
-    where: {
-      emailType: EmailType.TRANSACTIONAL,
-      ...(q ? { recipientEmail: { contains: q.toLowerCase() } } : {}),
-      ...(searchParams.event ? { eventType: searchParams.event } : {}),
-      ...(searchParams.template ? { templateKey: searchParams.template } : {}),
-      ...(searchParams.status ? { status: searchParams.status as EmailJobStatus } : {}),
-    },
-    orderBy: { createdAt: "desc" },
-    take: 100,
-    select: {
-      id: true,
-      recipientEmail: true,
-      eventType: true,
-      templateKey: true,
-      templateVersion: true,
-      status: true,
-      providerMessageId: true,
-      createdAt: true,
-      sentAt: true,
-      errorCode: true,
-    },
+const field = "rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900";
+
+function qs(f: LogFilters, extra: Record<string, string> = {}): string {
+  const p = new URLSearchParams({
+    ...(f.q ? { q: f.q, field: f.field } : {}),
+    ...(f.event !== "all" ? { event: f.event } : {}),
+    ...(f.type !== "all" ? { type: f.type } : {}),
+    from: f.fromDay,
+    to: f.toDay,
+    ...extra,
   });
+  return p.toString();
+}
+
+export default async function EmailLogsPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
+  const f = parseLogFilters(searchParams);
+  const { rows, total, nextBefore } = await queryEmailLogs(f, PAGE_SIZE);
 
   return (
     <div>
       <PageHeader
-        title="Delivery logs"
-        description="Latest 100 transactional deliveries. Filter by recipient, event, template, or status."
+        title="Logs"
+        icon={ScrollText}
+        description="Every event that happened to your emails — campaigns and transactional. Times are IST."
+        actions={
+          <>
+            <Button as="a" href={`/transactional/logs?${qs(f)}`} variant="secondary">
+              <RefreshCw className="mr-1 h-4 w-4" />
+              Refresh
+            </Button>
+            <Button as="a" href={`/transactional/logs/export.csv?${qs(f)}`} variant="secondary">
+              <Download className="mr-1 h-4 w-4" />
+              Download CSV
+            </Button>
+          </>
+        }
       />
-      <form className="mb-4 grid grid-cols-1 gap-2 md:grid-cols-4">
-        <Input name="q" placeholder="Recipient email…" defaultValue={q ?? ""} />
-        <Input name="event" placeholder="Event type…" defaultValue={searchParams.event ?? ""} />
-        <Input name="template" placeholder="Template key…" defaultValue={searchParams.template ?? ""} />
-        <Input name="status" placeholder="Status (e.g. SENT)…" defaultValue={searchParams.status ?? ""} />
+
+      <form className="mb-4 flex flex-wrap items-end gap-2">
+        <div className="flex min-w-[280px] flex-1">
+          <select name="field" defaultValue={f.field} className={`${field} rounded-r-none border-r-0`}>
+            <option value="recipient">Recipient (To)</option>
+            <option value="subject">Subject</option>
+            <option value="kind">Email type / campaign</option>
+          </select>
+          <input name="q" type="search" defaultValue={f.q} placeholder="Type keywords here" className={`${field} w-full rounded-l-none`} />
+        </div>
+        <label className="text-xs text-muted-foreground">
+          From
+          <input name="from" type="date" defaultValue={f.fromDay} className={`${field} mt-1 block`} />
+        </label>
+        <label className="text-xs text-muted-foreground">
+          To
+          <input name="to" type="date" defaultValue={f.toDay} className={`${field} mt-1 block`} />
+        </label>
+        <select name="event" defaultValue={f.event} className={field} aria-label="Event">
+          <option value="all">All events</option>
+          {LOG_EVENTS.map((e) => (
+            <option key={e} value={e}>
+              {LOG_EVENT_LABEL[e]}
+            </option>
+          ))}
+        </select>
+        <select name="type" defaultValue={f.type} className={field} aria-label="Email type">
+          <option value="all">All emails</option>
+          <option value="transactional">Transactional</option>
+          <option value="marketing">Campaigns</option>
+        </select>
+        <Button type="submit">Apply</Button>
       </form>
 
-      {jobs.length === 0 ? (
-        <EmptyState title="No deliveries yet" description="Send a transactional email to see it here." />
+      <p className="mb-2 text-lg font-semibold tabular-nums">{total.toLocaleString()} logs</p>
+
+      {rows.length === 0 ? (
+        <EmptyState icon={ScrollText} title="No logs" description="Nothing matches these filters in this date range." />
       ) : (
         <Table>
           <THead>
             <TR>
-              <TH>Recipient</TH>
+              <TH />
               <TH>Event</TH>
-              <TH>Template</TH>
-              <TH>Status</TH>
-              <TH>Provider id</TH>
-              <TH>Sent</TH>
+              <TH>Date</TH>
+              <TH>Subject</TH>
+              <TH>Recipient</TH>
+              <TH>Type</TH>
+              <TH>From</TH>
             </TR>
           </THead>
           <tbody>
-            {jobs.map((j) => (
-              <TR key={j.id}>
-                <TD>{j.recipientEmail}</TD>
+            {rows.map((r) => (
+              <TR key={r.key}>
                 <TD>
-                  <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{j.eventType ?? "—"}</code>
-                </TD>
-                <TD className="text-xs">
-                  {j.templateKey ? `${j.templateKey} · v${j.templateVersion ?? "?"}` : "—"}
+                  <Link href={`/transactional/logs/${r.jobId}`} aria-label="View email" className="text-violet-600 hover:text-violet-800">
+                    <Eye className="h-4 w-4" />
+                  </Link>
                 </TD>
                 <TD>
-                  <Badge tone={statusTone[j.status]}>{j.status}</Badge>
-                  {j.errorCode && <div className="mt-1 text-[10px] text-destructive">{j.errorCode}</div>}
+                  <EventPill event={r.event} />
+                  {r.detail && (r.event === "bounced" || r.event === "failed" || r.event === "skipped" || r.event === "clicked") && (
+                    <div className="mt-1 max-w-[220px] truncate text-[10px] text-muted-foreground" title={r.detail}>
+                      {r.detail}
+                    </div>
+                  )}
                 </TD>
-                <TD className="max-w-[220px] truncate font-mono text-[10px] text-muted-foreground">
-                  {j.providerMessageId ?? "—"}
+                <TD className="whitespace-nowrap text-xs">{fmtIst(r.at)}</TD>
+                <TD className="max-w-[320px]">
+                  <Link href={`/transactional/logs/${r.jobId}`} className="block truncate underline-offset-2 hover:underline" title={r.subject}>
+                    {r.subject}
+                  </Link>
                 </TD>
-                <TD className="whitespace-nowrap text-xs text-muted-foreground">
-                  {j.sentAt ? j.sentAt.toISOString().slice(0, 16).replace("T", " ") : "—"}
+                <TD className="text-xs">{r.recipient}</TD>
+                <TD>
+                  <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{r.kind}</code>
+                </TD>
+                <TD className="max-w-[200px] text-xs text-muted-foreground">
+                  <span className="block truncate" title={r.from}>
+                    {r.from}
+                  </span>
                 </TD>
               </TR>
             ))}
           </tbody>
         </Table>
       )}
+
+      <div className="mt-4 flex justify-between text-sm">
+        {f.before ? (
+          <Link href={`/transactional/logs?${qs(f)}`} className="text-emerald-700 hover:underline dark:text-emerald-300">
+            ← Newest
+          </Link>
+        ) : (
+          <span />
+        )}
+        {nextBefore && (
+          <Link
+            href={`/transactional/logs?${qs(f, { before: nextBefore.toISOString() })}`}
+            className="text-emerald-700 hover:underline dark:text-emerald-300"
+          >
+            Older →
+          </Link>
+        )}
+      </div>
     </div>
   );
 }

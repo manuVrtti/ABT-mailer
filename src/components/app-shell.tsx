@@ -56,7 +56,7 @@ const NAV: NavItem[] = [
   { href: "/transactional/realtime", label: "Real time", group: "transactional", icon: Activity },
   { href: "/transactional/templates", label: "Templates", group: "transactional", icon: Mail, badgeKey: "transactionalTemplates" },
   { href: "/transactional/events", label: "Events", group: "transactional", icon: Zap, badgeKey: "eventRules" },
-  { href: "/transactional/logs", label: "Delivery Logs", group: "transactional", icon: ScrollText },
+  { href: "/transactional/logs", label: "Logs", group: "transactional", icon: ScrollText },
   { href: "/transactional/analytics", label: "Analytics", group: "transactional", icon: BarChart3 },
 
   { href: "/settings", label: "Settings", group: "system", icon: Settings },
