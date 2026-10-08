@@ -3,6 +3,7 @@ import { Download, Eye, RefreshCw, ScrollText } from "lucide-react";
 import { PageHeader, Table, THead, TR, TH, TD, EmptyState, Button } from "@/components/ui";
 import { LOG_EVENTS, LOG_EVENT_LABEL, parseLogFilters, queryEmailLogs, type LogFilters } from "@/server/logs/query";
 import { EventPill, fmtIst } from "./_shared";
+import { LiveToggle } from "./_live";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Logs" };
@@ -35,6 +36,8 @@ export default async function EmailLogsPage({ searchParams }: { searchParams: Re
         description="Every event that happened to your emails — campaigns and transactional. Times are IST."
         actions={
           <>
+            {/* Older pages are a fixed window; only the newest page goes live. */}
+            {!f.before && <LiveToggle />}
             <Button as="a" href={`/transactional/logs?${qs(f)}`} variant="secondary">
               <RefreshCw className="mr-1 h-4 w-4" />
               Refresh
