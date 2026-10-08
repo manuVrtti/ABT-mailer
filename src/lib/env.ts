@@ -49,6 +49,9 @@ const serverSchema = z.object({
 
   // Transactional API
   TRANSACTIONAL_API_HMAC_SECRET: z.string().min(16),
+  // Where bounces / complaints for the caller's mail are reported back
+  // (e.g. https://abtalks.in/api/webhooks/abt-mailer). Unset = not reported.
+  CALLER_WEBHOOK_URL: optionalUrl,
 
   // Tokens
   UNSUBSCRIBE_TOKEN_SECRET: z.string().min(16),
