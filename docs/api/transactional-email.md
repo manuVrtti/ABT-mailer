@@ -69,6 +69,23 @@ If the caller builds its own HTML (the ABTalks app does), send `content` instead
 - Idempotency is per `(eventId, eventType, email)`.
 - `"sensitive": true` for mail that contains a secret (one-time code, password, reset link): once the job is sent, skipped or permanently failed, its subject and body are wiped from the database. Status, timings and delivery events are kept.
 
+## Bounce and complaint callbacks
+
+When `CALLER_WEBHOOK_URL` is set, every bounce and spam complaint on mail sent through this endpoint is POSTed there, signed the same way (`X-ABTalks-Timestamp`, `X-ABTalks-Signature: v1=<hmac of "${ts}.${body}">` with `TRANSACTIONAL_API_HMAC_SECRET`):
+
+```json
+{
+  "type": "bounce",
+  "bounceType": "Permanent",
+  "kind": "resume_import.outreach.invite",
+  "eventId": "<the eventId you sent>",
+  "email": "student@example.in",
+  "occurredAt": "2026-10-08T11:23:08.275Z"
+}
+```
+
+`type` is `bounce` or `complaint`; `bounceType` (bounces only) is `Permanent`, `Transient` or `Undetermined`. SNS may deliver an event twice, so handle repeats. Campaign mail is never reported.
+
 ## Responses
 
 Every successful call returns `200`. Read `status` — do not treat `200` alone as "sent".

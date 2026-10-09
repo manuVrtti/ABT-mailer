@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger";
 import { EmailService } from "@/server/email";
 import { parseSesEvent, type SnsEnvelope } from "@/server/ses/sns-parser";
 import { addSuppression } from "@/server/email/suppression";
+import { reportToCaller } from "@/server/webhooks/caller";
 import { normalizeEmail } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -64,6 +65,7 @@ export async function POST(req: Request) {
   await EmailService.processProviderEvent(event);
   await bumpCampaignCounter(event);
   await maybeSuppress(event);
+  await reportToCaller(event);
 
   return NextResponse.json({ ok: true, type: event.type });
 }
