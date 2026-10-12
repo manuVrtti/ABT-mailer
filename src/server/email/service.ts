@@ -237,10 +237,15 @@ export const EmailService = {
   }) {
     const env = getServerEnv();
     const provider = getEmailProvider();
+    // Without an explicit sender, test as the default brand (Settings → Senders).
+    const brand = input.fromEmail ? null : sendableDefault(await listBrands());
     return provider.send({
       to: normalizeEmail(input.to),
-      from: { email: input.fromEmail ?? env.SES_FROM_EMAIL, name: input.fromName ?? env.SES_FROM_NAME },
-      replyTo: input.replyTo ?? env.SES_REPLY_TO,
+      from: {
+        email: input.fromEmail ?? brand?.fromAddresses[0] ?? env.SES_FROM_EMAIL,
+        name: input.fromName ?? brand?.fromName ?? env.SES_FROM_NAME,
+      },
+      replyTo: input.replyTo ?? brand?.replyTo ?? env.SES_REPLY_TO,
       subject: `[TEST] ${input.subject}`,
       html: input.html,
       text: input.text,
