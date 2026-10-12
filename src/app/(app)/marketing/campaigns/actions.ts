@@ -115,13 +115,18 @@ const senderSchema = z.object({
 export async function updateCampaignSender(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
-  const parsed = senderSchema.parse({
+  const result = senderSchema.safeParse({
     fromName: formData.get("fromName"),
     fromEmail: formData.get("fromEmail"),
     replyTo: formData.get("replyTo") || undefined,
   });
+  // Problems go back to the form as a message, not an error page.
+  const back = (msg: string) =>
+    redirect(`/marketing/campaigns/${id}/edit?open=sender&senderError=${encodeURIComponent(msg)}`);
+  if (!result.success) back("Pick a From email and enter a From name (and a valid reply-to, if any).");
+  const parsed = result.data!;
   if (!senderBrand(await listBrands(), parsed.fromEmail)) {
-    throw new Error(`${parsed.fromEmail} is not on a sender domain verified in SES. Add or check it in Settings → Senders.`);
+    back(`${parsed.fromEmail} can't send yet — its domain isn't verified in SES. Pick another sender, or click "Check SES" in Settings → Senders once it's verified.`);
   }
   await db.campaign.update({ where: { id }, data: parsed });
   await db.auditLog.create({

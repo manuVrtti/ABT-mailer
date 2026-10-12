@@ -95,6 +95,11 @@ export async function checkBrandInSes(id: string): Promise<SenderActionResult> {
 
 export async function makeDefaultBrand(id: string): Promise<SenderActionResult> {
   const user = await requireRole([Role.ADMIN]);
+  const brand = await db.brand.findUnique({ where: { id }, select: { sesVerified: true, name: true } });
+  if (!brand) return { ok: false, error: "Sender not found." };
+  if (!brand.sesVerified) {
+    return { ok: false, error: `${brand.name} can't send yet — click "Check SES" once SES shows it verified, then make it default.` };
+  }
   await db.$transaction([
     db.brand.updateMany({ where: { NOT: { id } }, data: { isDefault: false } }),
     db.brand.update({ where: { id }, data: { isDefault: true } }),

@@ -16,7 +16,7 @@ import {
   renderTemplate,
 } from "@/server/email/render";
 import { getEmailProvider } from "@/server/email/provider-factory";
-import { brandForAddress, domainOf, listBrands, pickBrand, senderBrand, type BrandInfo } from "@/server/brands";
+import { brandForAddress, domainOf, listBrands, senderBrand, sendableDefault, type BrandInfo } from "@/server/brands";
 import { ProviderError } from "@/server/email/types";
 import type {
   EnqueueResult,
@@ -523,7 +523,7 @@ async function resolveSender(
       replyTo: overrides.replyTo ?? brand.replyTo,
     };
   }
-  const brand = pickBrand(brands, null);
+  const brand = sendableDefault(brands);
   const fromEmail = brand.fromAddresses[0] ?? getServerEnv().SES_FROM_EMAIL;
   return { brand, fromEmail, fromName: overrides?.fromName ?? brand.fromName, replyTo: overrides?.replyTo ?? brand.replyTo };
 }
