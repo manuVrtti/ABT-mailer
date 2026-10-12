@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { EmailCategory, SuppressionReason } from "@prisma/client";
-import { domainOf, pickBrand, senderBrand, type BrandInfo } from "@/server/brands";
+import { domainOf, pickBrand, senderBrand, sendableDefault, type BrandInfo } from "@/server/brands";
 import { decideSuppression } from "@/server/email/suppression";
 
 const brand = (over: Partial<BrandInfo>): BrandInfo => ({
@@ -30,6 +30,12 @@ describe("brand lookup", () => {
   it("falls back to the default brand", () => {
     expect(pickBrand(brands, "someone@elsewhere.com").key).toBe("klymb");
     expect(pickBrand(brands, null).key).toBe("klymb");
+  });
+
+  it("never sends as an unverified default", () => {
+    const unverifiedDefault = [{ ...klymb, sesVerified: false }, abtalks];
+    expect(sendableDefault(unverifiedDefault).key).toBe("abtalks");
+    expect(sendableDefault(brands).key).toBe("klymb");
   });
 
   it("allows any address on a verified domain, nothing on an unverified one", () => {

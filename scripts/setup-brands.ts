@@ -7,8 +7,8 @@
  *   npx tsx --env-file=.env scripts/setup-brands.ts --apply    # does it
  *
  * Idempotent. It:
- *   1. creates the ABTalks brand from the current env sender (already sending,
- *      so marked verified) and makes it the default if no default exists;
+ *   1. creates the ABTalks brand (abtalks.in — already sending, so marked
+ *      verified) and makes it the default if no default exists;
  *   2. creates the Klymb brand, NOT verified — use "Check SES" in Settings →
  *      Senders once klymb.ai is verified in SES, then "Make default";
  *   3. tags existing unsubscribes and complaints (all from ABTalks mail) with
@@ -21,21 +21,21 @@ const db = new PrismaClient();
 const apply = process.argv.includes("--apply");
 
 async function main() {
-  const envFrom = (process.env.SES_FROM_EMAIL ?? "").toLowerCase();
-  const envDomain = envFrom.split("@")[1];
-  if (!envDomain) throw new Error("SES_FROM_EMAIL is not set");
-
+  // The addresses production actually sends from (email_jobs, Oct 2026):
+  // campaigns from no-reply@abtalks.in, the website from team@abtalks.in.
+  // Not read from env: a stale local SES_FROM_EMAIL would set the wrong domain
+  // and every ABTalks send would then be refused as unverified.
   const brands = [
     {
       key: "abtalks",
       name: "ABTalks",
-      domain: envDomain,
-      fromName: process.env.SES_FROM_NAME || "ABTalks",
-      fromAddresses: Array.from(new Set([envFrom, `team@${envDomain}`, `no-reply@${envDomain}`])),
-      replyTo: process.env.SES_REPLY_TO || `team@${envDomain}`,
-      websiteUrl: `https://${envDomain}`,
+      domain: "abtalks.in",
+      fromName: "ABTalks",
+      fromAddresses: ["no-reply@abtalks.in", "team@abtalks.in"],
+      replyTo: "team@abtalks.in",
+      websiteUrl: "https://abtalks.in",
       sesVerified: true,
-      sesStatus: "Already sending (environment sender)",
+      sesStatus: "Already sending",
     },
     {
       key: "klymb",

@@ -37,7 +37,7 @@ export default async function SendersPage() {
                 <h2 className="text-lg font-semibold">{b.name}</h2>
                 {b.isDefault && (
                   <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300">
-                    Default
+                    Default{b.sesVerified ? "" : " (not used until verified)"}
                   </span>
                 )}
                 <code className="rounded bg-muted px-1.5 py-0.5 text-[11px]">{b.key}</code>
@@ -58,7 +58,7 @@ export default async function SendersPage() {
                 )}
               </div>
             </div>
-            <BrandRowActions id={b.id} isDefault={b.isDefault} />
+            <BrandRowActions id={b.id} isDefault={b.isDefault} canSend={b.sesVerified} />
           </div>
           <details>
             <summary className="cursor-pointer text-sm text-emerald-700 dark:text-emerald-300">Edit</summary>

@@ -19,7 +19,7 @@ function Message({ res }: { res: SenderActionResult | null }) {
   );
 }
 
-export function BrandRowActions({ id, isDefault }: { id: string; isDefault: boolean }) {
+export function BrandRowActions({ id, isDefault, canSend }: { id: string; isDefault: boolean; canSend: boolean }) {
   const [pending, start] = useTransition();
   const [res, setRes] = useState<SenderActionResult | null>(null);
   const run = (fn: () => Promise<SenderActionResult>) => start(async () => setRes(await fn()));
@@ -30,7 +30,7 @@ export function BrandRowActions({ id, isDefault }: { id: string; isDefault: bool
         <Button type="button" variant="secondary" disabled={pending} onClick={() => run(() => checkBrandInSes(id))}>
           {pending ? "Checking…" : "Check SES"}
         </Button>
-        {!isDefault && (
+        {!isDefault && canSend && (
           <Button type="button" variant="secondary" disabled={pending} onClick={() => run(() => makeDefaultBrand(id))}>
             Make default
           </Button>

@@ -41,7 +41,7 @@ export default async function CampaignEditPage({
   searchParams,
 }: {
   params: { id: string };
-  searchParams: { open?: string };
+  searchParams: { open?: string; senderError?: string };
 }) {
   const campaign = await db.campaign.findUnique({
     where: { id: params.id },
@@ -95,7 +95,12 @@ export default async function CampaignEditPage({
 
       {/* Four editable sections. */}
       <div className="space-y-3">
-        <SenderSection open={open === "sender"} campaign={campaign} ready={senderReady} />
+        <SenderSection
+          open={open === "sender"}
+          campaign={campaign}
+          ready={senderReady}
+          error={searchParams.senderError?.slice(0, 300)}
+        />
         <RecipientsSection
           open={open === "recipients"}
           campaign={campaign}
@@ -265,21 +270,25 @@ async function SenderSection({
   open,
   campaign,
   ready,
+  error,
 }: {
   open: boolean;
   campaign: { id: string; fromName: string; fromEmail: string; replyTo: string | null };
   ready: boolean;
+  error?: string;
 }) {
-  // Every From address of every brand (Settings → Senders). A brand SES hasn't
-  // verified is listed but can't be picked. The campaign's current address is
-  // kept in the list even if it isn't configured, so saving never changes it
-  // by surprise.
+  // Every From address of every brand (Settings → Senders). Unverified ones are
+  // labelled, not disabled: a disabled <option> is left out of the form post,
+  // so a campaign already on one would submit no From address at all. Saving
+  // an unverified sender is refused by the action with a message instead. The
+  // campaign's current address is kept in the list even if it isn't
+  // configured, so saving never changes it by surprise.
   const brands = await listBrands();
   const options = brands.flatMap((b) =>
-    b.fromAddresses.map((a) => ({ value: a, label: `${b.name} — ${a}`, disabled: !b.sesVerified })),
+    b.fromAddresses.map((a) => ({ value: a, label: `${b.name} — ${a}`, verified: b.sesVerified })),
   );
   if (!options.some((o) => o.value === campaign.fromEmail.toLowerCase())) {
-    options.unshift({ value: campaign.fromEmail, label: `${campaign.fromEmail} (not a configured sender)`, disabled: false });
+    options.unshift({ value: campaign.fromEmail, label: `${campaign.fromEmail} (not a configured sender)`, verified: false });
   }
 
   const summary = ready ? (
@@ -304,6 +313,11 @@ async function SenderSection({
     >
       <form action={updateCampaignSender} className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <input type="hidden" name="id" value={campaign.id} />
+        {error && (
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-500/10 dark:text-red-300 md:col-span-2">
+            {error}
+          </p>
+        )}
         <div>
           <label htmlFor="fromName" className="text-xs font-medium">From name</label>
           <Input id="fromName" name="fromName" defaultValue={campaign.fromName} required maxLength={120} />
@@ -318,9 +332,8 @@ async function SenderSection({
             className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900"
           >
             {options.map((o) => (
-              <option key={o.value} value={o.value} disabled={o.disabled}>
-                {o.label}
-                {o.disabled ? " (not verified in SES)" : ""}
+              <option key={o.value} value={o.value}>
+                {o.verified ? o.label : `${o.label} — not verified in SES, can't send`}
               </option>
             ))}
           </select>

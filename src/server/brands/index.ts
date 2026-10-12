@@ -65,6 +65,15 @@ export function senderBrand(brands: BrandInfo[], email: string): BrandInfo | nul
   return brands.find((b) => b.domain === d && b.sesVerified) ?? null;
 }
 
+/**
+ * Pure: the brand to send as when nothing else decides — the default brand if
+ * SES has verified it, else the first verified brand. Never an unverified
+ * brand, so marking a not-yet-verified brand default can't break sending.
+ */
+export function sendableDefault(brands: BrandInfo[]): BrandInfo {
+  return brands.find((b) => b.isDefault && b.sesVerified) ?? brands.find((b) => b.sesVerified) ?? pickBrand(brands, null);
+}
+
 /** Brand.key for unsubscribe links made before brands existed (all ABTalks mail). */
 export const LEGACY_BRAND_KEY = "abtalks";
 
@@ -106,6 +115,7 @@ export async function brandByKey(key: string | undefined): Promise<BrandInfo> {
   return brands.find((b) => b.key === k) ?? pickBrand(brands, null);
 }
 
+/** The brand new campaigns and sender-less API mail use: see sendableDefault. */
 export async function defaultBrand(): Promise<BrandInfo> {
-  return pickBrand(await listBrands(), null);
+  return sendableDefault(await listBrands());
 }
