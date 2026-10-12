@@ -58,6 +58,7 @@ export default async function SuppressionsPage({ searchParams }: { searchParams:
               <TR>
                 <TH>Email</TH>
                 <TH>Category</TH>
+                <TH>Brand</TH>
                 <TH>Reason</TH>
                 <TH>Note</TH>
                 <TH>Added</TH>
@@ -71,6 +72,7 @@ export default async function SuppressionsPage({ searchParams }: { searchParams:
                   <TD>
                     <Badge tone="muted">{r.category}</Badge>
                   </TD>
+                  <TD className="text-xs">{r.brandKey || "All brands"}</TD>
                   <TD>
                     <Badge tone={r.reason === "HARD_BOUNCE" || r.reason === "COMPLAINT" ? "destructive" : "warning"}>
                       {r.reason}

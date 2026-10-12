@@ -8,13 +8,14 @@
       "Resource": [
         "arn:aws:ses:ap-south-1:*:identity/mail.abtalks.in",
         "arn:aws:ses:ap-south-1:*:identity/abtalks.in",
+        "arn:aws:ses:ap-south-1:*:identity/klymb.ai",
         "arn:aws:ses:ap-south-1:*:configuration-set/abtalks-mailer"
       ]
     },
     {
       "Sid": "SESReadQuota",
       "Effect": "Allow",
-      "Action": ["ses:GetAccount", "ses:GetSendQuota", "ses:ListSuppressedDestinations"],
+      "Action": ["ses:GetAccount", "ses:GetSendQuota", "ses:ListSuppressedDestinations", "ses:GetEmailIdentity"],
       "Resource": "*"
     }
   ]

@@ -27,6 +27,7 @@ import { ActionsPanel } from "../_actions-panel";
 import { RecipientsPicker } from "./_recipients-picker";
 import { DesignStudio } from "./_design-studio";
 import { campaignListIds, countListsAudience } from "@/server/campaigns/audience";
+import { listBrands } from "@/server/brands";
 
 export const dynamic = "force-dynamic";
 // Launch server action runs here; the launcher self-limits to ~40s.
@@ -260,7 +261,7 @@ function StatusDot({ ready }: { ready: boolean }) {
 // Sender section.
 // ---------------------------------------------------------------------------
 
-function SenderSection({
+async function SenderSection({
   open,
   campaign,
   ready,
@@ -269,6 +270,18 @@ function SenderSection({
   campaign: { id: string; fromName: string; fromEmail: string; replyTo: string | null };
   ready: boolean;
 }) {
+  // Every From address of every brand (Settings → Senders). A brand SES hasn't
+  // verified is listed but can't be picked. The campaign's current address is
+  // kept in the list even if it isn't configured, so saving never changes it
+  // by surprise.
+  const brands = await listBrands();
+  const options = brands.flatMap((b) =>
+    b.fromAddresses.map((a) => ({ value: a, label: `${b.name} — ${a}`, disabled: !b.sesVerified })),
+  );
+  if (!options.some((o) => o.value === campaign.fromEmail.toLowerCase())) {
+    options.unshift({ value: campaign.fromEmail, label: `${campaign.fromEmail} (not a configured sender)`, disabled: false });
+  }
+
   const summary = ready ? (
     <span>
       {campaign.fromName} &lt;{campaign.fromEmail}&gt;
@@ -297,7 +310,27 @@ function SenderSection({
         </div>
         <div>
           <label htmlFor="fromEmail" className="text-xs font-medium">From email</label>
-          <Input id="fromEmail" name="fromEmail" type="email" defaultValue={campaign.fromEmail} required />
+          <select
+            id="fromEmail"
+            name="fromEmail"
+            defaultValue={options.find((o) => o.value === campaign.fromEmail.toLowerCase())?.value ?? campaign.fromEmail}
+            required
+            className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900"
+          >
+            {options.map((o) => (
+              <option key={o.value} value={o.value} disabled={o.disabled}>
+                {o.label}
+                {o.disabled ? " (not verified in SES)" : ""}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Add brands and addresses in{" "}
+            <Link href="/settings/senders" className="underline">
+              Settings → Senders
+            </Link>
+            .
+          </p>
         </div>
         <div className="md:col-span-2">
           <label htmlFor="replyTo" className="text-xs font-medium">Reply-to (optional)</label>

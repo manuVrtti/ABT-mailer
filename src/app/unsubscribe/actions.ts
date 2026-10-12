@@ -5,6 +5,7 @@ import { EmailCategory, SuppressionReason } from "@prisma/client";
 import { db } from "@/lib/db";
 import { addSuppression } from "@/server/email/suppression";
 import { verifyUnsubscribeToken } from "@/server/unsubscribe/token";
+import { LEGACY_BRAND_KEY } from "@/server/brands";
 
 export async function confirmUnsubscribe(formData: FormData) {
   const token = String(formData.get("token") ?? "");
@@ -13,12 +14,15 @@ export async function confirmUnsubscribe(formData: FormData) {
   if (!claims) redirect("/unsubscribe?error=invalid");
 
   const email = claims.email.toLowerCase();
+  // Unsubscribing only leaves the brand whose email held the link. Links sent
+  // before brands existed were all ABTalks mail.
+  const brandKey = claims.brandKey ?? LEGACY_BRAND_KEY;
 
   if (scope === "all") {
-    await addSuppression(email, EmailCategory.MARKETING, SuppressionReason.UNSUBSCRIBE, "user chose: all marketing + non-essential");
-    await addSuppression(email, EmailCategory.TRANSACTIONAL_NONESSENTIAL, SuppressionReason.UNSUBSCRIBE, "user chose: all marketing + non-essential");
+    await addSuppression(email, EmailCategory.MARKETING, SuppressionReason.UNSUBSCRIBE, "user chose: all marketing + non-essential", brandKey);
+    await addSuppression(email, EmailCategory.TRANSACTIONAL_NONESSENTIAL, SuppressionReason.UNSUBSCRIBE, "user chose: all marketing + non-essential", brandKey);
   } else {
-    await addSuppression(email, EmailCategory.MARKETING, SuppressionReason.UNSUBSCRIBE, "user unsubscribed from marketing");
+    await addSuppression(email, EmailCategory.MARKETING, SuppressionReason.UNSUBSCRIBE, "user unsubscribed from marketing", brandKey);
   }
 
   if (claims.campaignId) {
@@ -32,10 +36,10 @@ export async function confirmUnsubscribe(formData: FormData) {
     data: {
       action: "unsubscribe.confirm",
       resource: `email:${email}`,
-      metadata: { scope, campaignId: claims.campaignId ?? null },
+      metadata: { scope, brandKey, campaignId: claims.campaignId ?? null },
       result: "success",
     },
   });
 
-  redirect(`/unsubscribe/done?scope=${scope}`);
+  redirect(`/unsubscribe/done?scope=${scope}&b=${encodeURIComponent(brandKey)}`);
 }

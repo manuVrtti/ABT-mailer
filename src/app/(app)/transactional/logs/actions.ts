@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { renderCampaignHtml } from "@/server/campaigns/launcher";
 import { enqueueDelivery } from "@/server/queue/publish";
+import { brandForAddress } from "@/server/brands";
 
 export type LogActionResult = { ok: true; jobId?: string } | { ok: false; error: string };
 
@@ -42,6 +43,7 @@ export async function resendLogEmail(jobId: string): Promise<LogActionResult> {
         email: job.recipientEmail,
         campaignId: job.campaignId!,
         slug: job.campaign.slug,
+        brand: await brandForAddress(job.fromEmail),
       });
     }
   }

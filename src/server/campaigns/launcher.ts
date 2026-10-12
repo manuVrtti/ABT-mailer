@@ -10,6 +10,7 @@ import { renderTemplate } from "@/server/email/render";
 import { enqueueDeliveries, enqueueFanoutContinuation } from "@/server/queue/publish";
 import { isQStashConfigured } from "@/server/queue/qstash";
 import { unsubscribeUrl } from "@/server/unsubscribe/token";
+import { brandForAddress } from "@/server/brands";
 import { addUtmToHtml } from "@/server/utm/rewrite";
 
 // Contacts per DB round. Each batch is ~7 queries + 2 QStash batch calls.
@@ -35,13 +36,22 @@ type ContactVars = Record<string, string | number | null>;
 export function renderCampaignHtml(
   templateHtml: string,
   variables: ContactVars,
-  ctx: { email: string; campaignId: string; slug: string },
+  ctx: { email: string; campaignId: string; slug: string; brand: { key: string; name: string } },
 ): string {
   let html = renderTemplate(templateHtml, variables, { sanitize: true });
   html = addUtmToHtml(html, { source: "email", medium: "campaign", campaign: ctx.slug });
-  const unsubUrl = unsubscribeUrl({ email: ctx.email, category: EmailCategory.MARKETING, campaignId: ctx.campaignId });
-  html += `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #eaeaea;font-size:12px;color:#888;text-align:center;font-family:Arial,sans-serif;">ABTalks · This email was sent to ${ctx.email}. <a href="${unsubUrl}" style="color:#888;text-decoration:underline;">Unsubscribe</a>.</div>`;
+  const unsubUrl = unsubscribeUrl({
+    email: ctx.email,
+    category: EmailCategory.MARKETING,
+    campaignId: ctx.campaignId,
+    brandKey: ctx.brand.key,
+  });
+  html += `<div style="margin-top:32px;padding-top:16px;border-top:1px solid #eaeaea;font-size:12px;color:#888;text-align:center;font-family:Arial,sans-serif;">${escapeHtml(ctx.brand.name)} · This email was sent to ${ctx.email}. <a href="${unsubUrl}" style="color:#888;text-decoration:underline;">Unsubscribe</a>.</div>`;
   return html;
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 /**
@@ -97,6 +107,8 @@ export async function launchCampaignFanout(
   let cursor = opts.afterContactId;
   let enqueued = 0;
   let skipped = 0;
+  // Unsubscribes and complaints only count for the brand this campaign sends as.
+  const brand = await brandForAddress(campaign.fromEmail);
 
   for (;;) {
     const batch = await db.marketingContact.findMany({
@@ -111,7 +123,7 @@ export async function launchCampaignFanout(
       return { enqueued, skipped, done: true };
     }
 
-    const r = await processBatch(campaign, batch);
+    const r = await processBatch(campaign, batch, brand.key);
     enqueued += r.enqueued;
     skipped += r.skipped;
     cursor = batch[batch.length - 1]!.id;
@@ -135,10 +147,12 @@ export async function launchCampaignFanout(
 async function processBatch(
   campaign: { id: string; slug: string; subject: string; templateId: string | null; fromEmail: string; fromName: string; replyTo: string | null },
   batch: { id: string; email: string; firstName: string | null; lastName: string | null; college: string | null; branch: string | null; year: string | null }[],
+  brandKey: string,
 ): Promise<{ enqueued: number; skipped: number }> {
   const suppression = await checkSuppressionBulk(
     batch.map((c) => c.email),
     EmailCategory.MARKETING,
+    brandKey,
   );
 
   let skipped = 0;
