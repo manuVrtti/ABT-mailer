@@ -17,6 +17,10 @@ import { normalizeEmail } from "@/lib/utils";
  *
  * The check runs server-side inside enqueue and again inside the worker so a
  * suppression added after enqueue still takes effect.
+ *
+ * Brands: a row with brandKey "" applies to every brand (hard bounces, manual
+ * blocks); any other row only to that brand (unsubscribes, complaints). Pass
+ * the sending brand's key; leaving it out applies every row (strictest).
  */
 
 export interface SuppressionDecision {
@@ -24,30 +28,38 @@ export interface SuppressionDecision {
   reason?: string;
 }
 
+/** brandKey for suppressions that apply to every brand. */
+export const ALL_BRANDS = "";
+
 export async function checkSuppression(
   email: string,
   category: EmailCategory,
+  brandKey?: string,
 ): Promise<SuppressionDecision> {
   const normalized = normalizeEmail(email);
   const rows = await db.suppression.findMany({ where: { email: normalized } });
-  return decideSuppression(rows, category);
+  return decideSuppression(rows, category, brandKey);
 }
 
 /** One query for a whole batch of recipients. Emails must already be normalized. */
 export async function checkSuppressionBulk(
   emails: string[],
   category: EmailCategory,
+  brandKey?: string,
 ): Promise<Map<string, SuppressionDecision>> {
   const rows = emails.length > 0 ? await db.suppression.findMany({ where: { email: { in: emails } } }) : [];
   const byEmail = new Map<string, typeof rows>();
   for (const r of rows) byEmail.set(r.email, [...(byEmail.get(r.email) ?? []), r]);
-  return new Map(emails.map((e) => [e, decideSuppression(byEmail.get(e) ?? [], category)]));
+  return new Map(emails.map((e) => [e, decideSuppression(byEmail.get(e) ?? [], category, brandKey)]));
 }
 
-function decideSuppression(
-  rows: { reason: SuppressionReason; category: EmailCategory }[],
+export function decideSuppression(
+  allRows: { reason: SuppressionReason; category: EmailCategory; brandKey: string }[],
   category: EmailCategory,
+  brandKey?: string,
 ): SuppressionDecision {
+  const rows =
+    brandKey === undefined ? allRows : allRows.filter((r) => r.brandKey === ALL_BRANDS || r.brandKey === brandKey);
   if (rows.length === 0) return { allowed: true };
 
   const hardBounce = rows.find((r) => r.reason === SuppressionReason.HARD_BOUNCE);
@@ -78,11 +90,12 @@ export async function addSuppression(
   category: EmailCategory,
   reason: SuppressionReason,
   note?: string,
+  brandKey: string = ALL_BRANDS,
 ): Promise<void> {
   const normalized = normalizeEmail(email);
   await db.suppression.upsert({
-    where: { email_category: { email: normalized, category } },
+    where: { email_category_brandKey: { email: normalized, category, brandKey } },
     update: { reason, note },
-    create: { email: normalized, category, reason, note },
+    create: { email: normalized, category, brandKey, reason, note },
   });
 }

@@ -14,6 +14,7 @@ import { extractVariables, renderTemplate } from "@/server/email/render";
 import { EmailService } from "@/server/email";
 import { getServerEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
+import { defaultBrand, listBrands, senderBrand } from "@/server/brands";
 
 function slugify(name: string): string {
   return (
@@ -62,6 +63,8 @@ export async function createDraftCampaign(formData: FormData) {
   }
 
   const slug = await uniqueSlug(slugify(parsed.name));
+  // New campaigns start on the default brand (Settings → Senders).
+  const brand = await defaultBrand();
 
   const campaign = await db.campaign.create({
     data: {
@@ -69,9 +72,9 @@ export async function createDraftCampaign(formData: FormData) {
       slug,
       subject: "",
       previewText: null,
-      fromName: env.SES_FROM_NAME,
-      fromEmail: env.SES_FROM_EMAIL,
-      replyTo: env.SES_REPLY_TO ?? null,
+      fromName: brand.fromName,
+      fromEmail: brand.fromAddresses[0] ?? env.SES_FROM_EMAIL,
+      replyTo: brand.replyTo ?? env.SES_REPLY_TO ?? null,
       segmentId,
       listId,
       listIds: listId ? [listId] : [],
@@ -117,6 +120,9 @@ export async function updateCampaignSender(formData: FormData) {
     fromEmail: formData.get("fromEmail"),
     replyTo: formData.get("replyTo") || undefined,
   });
+  if (!senderBrand(await listBrands(), parsed.fromEmail)) {
+    throw new Error(`${parsed.fromEmail} is not on a sender domain verified in SES. Add or check it in Settings → Senders.`);
+  }
   await db.campaign.update({ where: { id }, data: parsed });
   await db.auditLog.create({
     data: { userId: user.id, action: "campaign.update_sender", resource: `campaign:${id}`, result: "success" },
@@ -316,6 +322,10 @@ export async function launchCampaign(formData: FormData) {
   if (!campaign) throw new Error("Campaign not found");
   if (campaign.status !== CampaignStatus.DRAFT && campaign.status !== CampaignStatus.SCHEDULED) {
     throw new Error(`Campaign cannot be launched from status ${campaign.status}`);
+  }
+  // SES rejects every email from an unverified domain — stop before sending any.
+  if (!senderBrand(await listBrands(), campaign.fromEmail)) {
+    throw new Error(`The sender ${campaign.fromEmail} is not on a domain verified in SES. Check it in Settings → Senders.`);
   }
 
   let data: Prisma.CampaignUpdateInput;

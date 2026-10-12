@@ -545,20 +545,47 @@ model EmailEvent {
 // Suppression & unsubscribe
 // ---------------------------------------------------------------------------
 
-// (email, category) is unique. Essential transactional emails only bypass
-// when the reason is not HARD_BOUNCE (a hard bounce means the mailbox is dead
-// and even essential mail cannot land).
+// (email, category, brandKey) is unique. Essential transactional emails only
+// bypass when the reason is not HARD_BOUNCE (a hard bounce means the mailbox
+// is dead and even essential mail cannot land).
+//
+// brandKey scopes unsubscribes and complaints to one brand (Brand.key), so
+// leaving Klymb's marketing doesn't stop ABTalks' and vice versa. "" means
+// every brand: hard bounces and manual blocks.
 model Suppression {
   id        String            @id @default(cuid())
   email     String
   category  EmailCategory
+  brandKey  String            @default("") @map("brand_key")
   reason    SuppressionReason
   note      String?
   createdAt DateTime          @default(now()) @map("created_at")
 
-  @@unique([email, category])
+  @@unique([email, category, brandKey])
   @@index([email])
   @@map("suppressions")
+}
+
+// A sending identity: one domain verified in SES, the From addresses allowed
+// on it, and the name shown in footers and on the unsubscribe pages. A job's
+// brand is the one whose domain matches its From address.
+model Brand {
+  id            String    @id @default(cuid())
+  key           String    @unique // "klymb", "abtalks" — stored on suppressions
+  name          String // "Klymb", "ABTalks"
+  domain        String    @unique // "klymb.ai"
+  fromName      String    @map("from_name")
+  fromAddresses String[]  @map("from_addresses") // ["team@klymb.ai", "no-reply@klymb.ai"]
+  replyTo       String?   @map("reply_to")
+  websiteUrl    String?   @map("website_url")
+  isDefault     Boolean   @default(false) @map("is_default")
+  sesVerified   Boolean   @default(false) @map("ses_verified")
+  sesCheckedAt  DateTime? @map("ses_checked_at")
+  sesStatus     String?   @map("ses_status") // last check, human readable
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("brands")
 }
 
 model UnsubscribeToken {

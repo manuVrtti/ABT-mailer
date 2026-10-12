@@ -16,6 +16,7 @@ import {
   renderTemplate,
 } from "@/server/email/render";
 import { getEmailProvider } from "@/server/email/provider-factory";
+import { brandForAddress, domainOf, listBrands, pickBrand, senderBrand, type BrandInfo } from "@/server/brands";
 import { ProviderError } from "@/server/email/types";
 import type {
   EnqueueResult,
@@ -113,12 +114,14 @@ export const EmailService = {
       throw err;
     }
 
-    const suppression = await checkSuppression(email, template.category);
+    const sender = await resolveSender(input.overrides);
+    if ("error" in sender) return { jobId: "", status: "invalid", reason: sender.error };
+
+    const suppression = await checkSuppression(email, template.category, sender.brand.key);
     if (!suppression.allowed) {
       return { jobId: "", status: "suppressed", reason: suppression.reason };
     }
 
-    const env = getServerEnv();
     const subject = renderTemplate(template.subject, input.variables, { strict: true });
     const html = renderTemplate(template.html, input.variables, { strict: true, sanitize: true });
     const text = template.text
@@ -142,9 +145,9 @@ export const EmailService = {
           eventType: input.eventType,
           eventId: input.eventId,
           subject,
-          fromEmail: input.overrides?.fromEmail ?? env.SES_FROM_EMAIL,
-          fromName: input.overrides?.fromName ?? env.SES_FROM_NAME,
-          replyTo: input.overrides?.replyTo ?? env.SES_REPLY_TO,
+          fromEmail: sender.fromEmail,
+          fromName: sender.fromName,
+          replyTo: sender.replyTo,
           variables: input.variables as Prisma.InputJsonValue,
           renderedHtml: html,
           renderedText: text,
@@ -171,12 +174,14 @@ export const EmailService = {
     if (!isValidEmail(email)) return { jobId: "", status: "invalid", reason: "invalid_email_format" };
 
     const category = EmailCategory[input.category];
-    const suppression = await checkSuppression(email, category);
+    const sender = await resolveSender(input.overrides);
+    if ("error" in sender) return { jobId: "", status: "invalid", reason: sender.error };
+
+    const suppression = await checkSuppression(email, category, sender.brand.key);
     if (!suppression.allowed) {
       return { jobId: "", status: "suppressed", reason: suppression.reason };
     }
 
-    const env = getServerEnv();
     const idempotencyKey = transactionalIdempotencyKey(input.eventId, `raw:${input.eventType}`, email);
     const headers = pickAllowedHeaders(input.content.headers);
 
@@ -193,9 +198,9 @@ export const EmailService = {
           eventType: input.eventType,
           eventId: input.eventId,
           subject: input.content.subject,
-          fromEmail: input.overrides?.fromEmail ?? env.SES_FROM_EMAIL,
-          fromName: input.overrides?.fromName ?? env.SES_FROM_NAME,
-          replyTo: input.overrides?.replyTo ?? env.SES_REPLY_TO,
+          fromEmail: sender.fromEmail,
+          fromName: sender.fromName,
+          replyTo: sender.replyTo,
           // No template variables on this path; the column holds the headers.
           variables: {
             [RAW_HEADERS_KEY]: headers,
@@ -278,9 +283,13 @@ export const EmailService = {
       }
     }
 
+    // The brand this job sends as (from its From address): scopes unsubscribes
+    // and complaints, and names the footer / unsubscribe page.
+    const brand = await brandForAddress(job.fromEmail);
+
     // Second suppression check inside the worker — a suppression added between
     // enqueue and delivery still takes effect.
-    const suppression = await checkSuppression(job.recipientEmail, job.category);
+    const suppression = await checkSuppression(job.recipientEmail, job.category, brand.key);
     if (!suppression.allowed) {
       await db.emailJob.update({
         where: { id: job.id },
@@ -316,6 +325,7 @@ export const EmailService = {
             email: job.recipientEmail,
             category: EmailCategory.MARKETING,
             campaignId: job.campaignId ?? undefined,
+            brandKey: brand.key,
           })
         : undefined;
     const headers: Record<string, string> = {};
@@ -341,6 +351,7 @@ export const EmailService = {
           email: job.recipientEmail,
           campaignId: job.campaignId,
           slug: camp.slug,
+          brand,
         });
       }
       const result = await provider.send({
@@ -491,6 +502,31 @@ export const EmailService = {
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * From / reply-to for a transactional send: the caller's override when its
+ * domain is a verified brand, else the default brand's first address. An
+ * override on an unverified domain is refused rather than sent (SES would
+ * reject it, and quietly swapping the sender would hide the mistake).
+ */
+async function resolveSender(
+  overrides: { fromEmail?: string; fromName?: string; replyTo?: string } | undefined,
+): Promise<{ brand: BrandInfo; fromEmail: string; fromName: string; replyTo: string | null } | { error: string }> {
+  const brands = await listBrands();
+  if (overrides?.fromEmail) {
+    const brand = senderBrand(brands, overrides.fromEmail);
+    if (!brand) return { error: `sender_not_verified:${domainOf(overrides.fromEmail)}` };
+    return {
+      brand,
+      fromEmail: normalizeEmail(overrides.fromEmail),
+      fromName: overrides.fromName ?? brand.fromName,
+      replyTo: overrides.replyTo ?? brand.replyTo,
+    };
+  }
+  const brand = pickBrand(brands, null);
+  const fromEmail = brand.fromAddresses[0] ?? getServerEnv().SES_FROM_EMAIL;
+  return { brand, fromEmail, fromName: overrides?.fromName ?? brand.fromName, replyTo: overrides?.replyTo ?? brand.replyTo };
+}
 
 const RAW_HEADERS_KEY = "__headers";
 const RAW_SENSITIVE_KEY = "__sensitive";

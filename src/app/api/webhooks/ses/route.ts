@@ -7,6 +7,7 @@ import { EmailService } from "@/server/email";
 import { parseSesEvent, type SnsEnvelope } from "@/server/ses/sns-parser";
 import { addSuppression } from "@/server/email/suppression";
 import { reportToCaller } from "@/server/webhooks/caller";
+import { brandForAddress } from "@/server/brands";
 import { normalizeEmail } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -105,13 +106,13 @@ async function bumpCampaignCounter(event: {
 
 async function findJob(event: { jobId?: string; providerMessageId?: string }) {
   if (event.jobId) {
-    const j = await db.emailJob.findUnique({ where: { id: event.jobId }, select: { id: true, campaignId: true, recipientEmail: true } });
+    const j = await db.emailJob.findUnique({ where: { id: event.jobId }, select: { id: true, campaignId: true, recipientEmail: true, fromEmail: true } });
     if (j) return j;
   }
   if (event.providerMessageId) {
     return db.emailJob.findFirst({
       where: { providerMessageId: event.providerMessageId },
-      select: { id: true, campaignId: true, recipientEmail: true },
+      select: { id: true, campaignId: true, recipientEmail: true, fromEmail: true },
     });
   }
   return null;
@@ -121,6 +122,8 @@ async function maybeSuppress(event: {
   type: string;
   bounceType?: "Permanent" | "Transient" | "Undetermined";
   recipient?: string;
+  jobId?: string;
+  providerMessageId?: string;
 }) {
   if (!event.recipient) return;
   const email = normalizeEmail(event.recipient);
@@ -131,9 +134,12 @@ async function maybeSuppress(event: {
     await addSuppression(email, EmailCategory.TRANSACTIONAL_ESSENTIAL, SuppressionReason.HARD_BOUNCE, "auto: SES bounce");
   }
   if (event.type === "COMPLAINT") {
-    // Complaints suppress marketing and non-essential transactional; essential
-    // (password reset, security) still goes through unless hard-bounced later.
-    await addSuppression(email, EmailCategory.MARKETING, SuppressionReason.COMPLAINT, "auto: SES complaint");
-    await addSuppression(email, EmailCategory.TRANSACTIONAL_NONESSENTIAL, SuppressionReason.COMPLAINT, "auto: SES complaint");
+    // Complaints suppress marketing and non-essential transactional for the
+    // brand complained about only; essential (password reset, security) still
+    // goes through unless hard-bounced later.
+    const job = await findJob(event);
+    const brand = await brandForAddress(job?.fromEmail);
+    await addSuppression(email, EmailCategory.MARKETING, SuppressionReason.COMPLAINT, "auto: SES complaint", brand.key);
+    await addSuppression(email, EmailCategory.TRANSACTIONAL_NONESSENTIAL, SuppressionReason.COMPLAINT, "auto: SES complaint", brand.key);
   }
 }

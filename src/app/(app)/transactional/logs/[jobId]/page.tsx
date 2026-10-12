@@ -5,6 +5,7 @@ import { EmailEventType, EmailType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { Card } from "@/components/ui";
 import { renderCampaignHtml } from "@/server/campaigns/launcher";
+import { brandForAddress } from "@/server/brands";
 import { eventDetail, type LogEvent } from "@/server/logs/query";
 import { EventPill, fmtIst } from "../_shared";
 import { LogActions } from "../_log-actions";
@@ -47,6 +48,7 @@ export default async function EmailLogDetailPage({ params }: { params: { jobId: 
         email: job.recipientEmail,
         campaignId: job.campaign.id,
         slug: job.campaign.slug,
+        brand: await brandForAddress(job.fromEmail),
       });
     }
   }

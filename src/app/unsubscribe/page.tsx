@@ -1,8 +1,9 @@
 import { verifyUnsubscribeToken } from "@/server/unsubscribe/token";
+import { brandByKey } from "@/server/brands";
 import { confirmUnsubscribe } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Unsubscribe · ABTalks" };
+export const metadata = { title: "Unsubscribe" };
 
 export default async function UnsubscribePage({
   searchParams,
@@ -11,11 +12,12 @@ export default async function UnsubscribePage({
 }) {
   const token = searchParams.t ?? "";
   const claims = token ? await verifyUnsubscribeToken(token) : null;
+  const brand = await brandByKey(claims?.brandKey);
 
   return (
     <main className="mx-auto flex min-h-screen max-w-lg flex-col items-center justify-center gap-6 p-6">
       <div className="w-full rounded-xl border border-border bg-card p-8 shadow-sm">
-        <div className="mb-4 text-xs uppercase tracking-wider text-muted-foreground">ABTalks</div>
+        <div className="mb-4 text-xs uppercase tracking-wider text-muted-foreground">{brand.name}</div>
         <h1 className="text-xl font-semibold">Manage your email preferences</h1>
 
         {!claims ? (
@@ -26,7 +28,7 @@ export default async function UnsubscribePage({
         ) : (
           <>
             <p className="mt-3 text-sm text-muted-foreground">
-              You&apos;re about to unsubscribe <b>{claims.email}</b> from ABTalks marketing emails. Account and
+              You&apos;re about to unsubscribe <b>{claims.email}</b> from {brand.name} marketing emails. Account and
               security emails (like password resets) will still be delivered.
             </p>
             <form action={confirmUnsubscribe} className="mt-6 space-y-3">

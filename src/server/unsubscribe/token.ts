@@ -6,7 +6,7 @@ import { normalizeEmail } from "@/lib/utils";
 /**
  * Deterministic HMAC-signed unsubscribe tokens.
  *
- * Payload:  { e: <normalized_email>, c: <category>, cmp?: <campaign_id> }
+ * Payload:  { e: <normalized_email>, c: <category>, cmp?: <campaign_id>, b?: <brand_key> }
  * Wire:     base64url(payload) + "." + base64url(hmac-sha256(payload))
  *
  * Why deterministic (vs JWT with iat/exp): the campaign launcher generates one
@@ -24,6 +24,8 @@ interface UnsubscribeClaims {
   email: string;
   category: EmailCategory;
   campaignId?: string;
+  /** Brand.key of the mail the link was in. Links made before brands existed have none. */
+  brandKey?: string;
 }
 
 function b64url(buf: Buffer | string): string {
@@ -45,6 +47,7 @@ export function createUnsubscribeToken(claims: UnsubscribeClaims): string {
     e: normalizeEmail(claims.email),
     c: claims.category,
     cmp: claims.campaignId,
+    b: claims.brandKey,
   });
   const p64 = b64url(payload);
   const sig = createHmac("sha256", env.UNSUBSCRIBE_TOKEN_SECRET).update(p64).digest();
@@ -66,6 +69,7 @@ export function verifyUnsubscribeToken(token: string): UnsubscribeClaims | null 
       email: String(payload.e),
       category: payload.c as EmailCategory,
       campaignId: payload.cmp ? String(payload.cmp) : undefined,
+      brandKey: payload.b ? String(payload.b) : undefined,
     };
   } catch {
     return null;

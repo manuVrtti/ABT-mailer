@@ -8,6 +8,7 @@ export const metadata = { title: "Settings" };
 export default async function SettingsIndexPage() {
   const env = getServerEnv();
   const sections = [
+    { href: "/settings/senders", title: "Senders", desc: "Brands you send as (Klymb, ABTalks…), their From addresses and SES status." },
     { href: "/settings/account", title: "Your account", desc: "Change your own password." },
     { href: "/settings/users", title: "Users & roles", desc: "Invite teammates and assign admin, marketer, or viewer roles." },
     { href: "/settings/suppressions", title: "Suppressions", desc: "Emails blocked from marketing or transactional sends." },
@@ -17,7 +18,7 @@ export default async function SettingsIndexPage() {
     <div className="space-y-6">
       <PageHeader title="Settings" description="Team, sender identity, deliverability, and integrations." />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
         {sections.map((s) => (
           <Link key={s.href} href={s.href} className="block rounded-lg border border-border bg-card p-4 hover:bg-accent">
             <div className="text-sm font-medium">{s.title}</div>
@@ -27,7 +28,7 @@ export default async function SettingsIndexPage() {
       </div>
 
       <Card>
-        <div className="mb-3 text-sm font-medium">Sender identity</div>
+        <div className="mb-3 text-sm font-medium">Environment sender (used until senders are added)</div>
         <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
           <Field label="From name" value={env.SES_FROM_NAME} />
           <Field label="From email" value={env.SES_FROM_EMAIL} />

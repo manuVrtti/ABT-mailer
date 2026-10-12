@@ -27,6 +27,12 @@ describe("unsubscribe token", () => {
     expect(claims!.email).toBe("alice@example.com");
     expect(claims!.category).toBe(EmailCategory.MARKETING);
     expect(claims!.campaignId).toBe("cmp_123");
+    expect(claims!.brandKey).toBeUndefined();
+  });
+
+  it("carries the brand when given", () => {
+    const token = createUnsubscribeToken({ email: "a@b.in", category: EmailCategory.MARKETING, brandKey: "klymb" });
+    expect(verifyUnsubscribeToken(token)!.brandKey).toBe("klymb");
   });
 
   it("is deterministic for the same inputs", () => {
