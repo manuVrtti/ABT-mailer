@@ -415,6 +415,52 @@ export async function deleteCampaign(id: string): Promise<{ ok: true } | { ok: f
   return { ok: true };
 }
 
+/**
+ * Copy a campaign into a new draft: name "<name> (copy)", same subject,
+ * preview text, sender, audience and design. Nothing that belongs to a send
+ * is copied — no schedule, no stats, no frozen snapshot — so the copy is
+ * edited and launched like any new campaign.
+ */
+export async function duplicateCampaign(id: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const src = await db.campaign.findUnique({ where: { id } });
+  if (!src) return { ok: false, error: "Campaign not found." };
+
+  const name = `${src.name} (copy)`.slice(0, 200);
+  const copy = await db.campaign.create({
+    data: {
+      name,
+      slug: await uniqueSlug(slugify(name)),
+      subject: src.subject,
+      previewText: src.previewText,
+      fromName: src.fromName,
+      fromEmail: src.fromEmail,
+      replyTo: src.replyTo,
+      templateId: src.templateId,
+      // A launched campaign whose design was a template keeps it in
+      // templateId; one that was pasted HTML keeps it in customHtml.
+      customHtml: src.customHtml,
+      segmentId: src.segmentId,
+      listId: src.listId,
+      listIds: src.listIds,
+      status: CampaignStatus.DRAFT,
+      createdById: user.id,
+    },
+    select: { id: true },
+  });
+  await db.auditLog.create({
+    data: {
+      userId: user.id,
+      action: "campaign.duplicate",
+      resource: `campaign:${copy.id}`,
+      metadata: { from: id },
+      result: "success",
+    },
+  });
+  revalidatePath("/marketing/campaigns");
+  return { ok: true, id: copy.id };
+}
+
 export async function cancelCampaign(id: string) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const campaign = await db.campaign.findUnique({ where: { id } });
