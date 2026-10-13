@@ -3,7 +3,7 @@ import { Megaphone, ArrowRight, Search, X } from "lucide-react";
 import { db } from "@/lib/db";
 import { CampaignStatus, Prisma } from "@prisma/client";
 import { PageHeader, Badge, Button, EmptyState } from "@/components/ui";
-import { DeleteCampaignButton } from "./_delete-campaign-button";
+import { CampaignRowMenu } from "./_campaign-row-menu";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Campaigns" };
@@ -159,7 +159,8 @@ export default async function CampaignsPage({
               }
             />
           ) : (
-            <div className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+            <div className="rounded-xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+              {/* No overflow-hidden here: the row menu has to be able to drop out of the list. */}
               <ul className="divide-y divide-border/60">
                 {campaigns.map((c) => {
                   const tone = statusTone[c.status];
@@ -168,12 +169,15 @@ export default async function CampaignsPage({
                     ? `Cancel this ${c.status.toLowerCase()} campaign before deleting it`
                     : undefined;
                   return (
-                    <li key={c.id} className="group flex items-center transition hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                    <li
+                      key={c.id}
+                      className="group flex items-center transition first:rounded-t-xl last:rounded-b-xl hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                    >
                       <Link
                         href={`/marketing/campaigns/${c.id}`}
                         className="grid min-w-0 flex-1 grid-cols-12 items-center gap-3 px-4 py-3"
                       >
-                        <div className="col-span-5 flex min-w-0 items-center gap-3">
+                        <div className="col-span-4 flex min-w-0 items-center gap-3">
                           <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${tone.dot}`} aria-hidden />
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium">{c.name}</div>
@@ -205,13 +209,18 @@ export default async function CampaignsPage({
                           <span className="text-sm text-foreground">{c.clickedCount.toLocaleString()}</span>
                         </div>
 
-                        <div className="col-span-1 flex items-center justify-end gap-2">
+                        <div className="col-span-2 flex min-w-0 items-center justify-end gap-2">
                           <Badge tone={tone.badge}>{c.status}</Badge>
-                          <ArrowRight className="hidden h-4 w-4 text-muted-foreground opacity-0 transition group-hover:opacity-100 lg:inline" />
+                          <ArrowRight className="hidden h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100 lg:inline" />
                         </div>
                       </Link>
                       <div className="pr-3">
-                        <DeleteCampaignButton id={c.id} name={c.name} blockedReason={blocked} />
+                        <CampaignRowMenu
+                          id={c.id}
+                          name={c.name}
+                          editable={c.status === "DRAFT" || c.status === "SCHEDULED"}
+                          blockedReason={blocked}
+                        />
                       </div>
                     </li>
                   );
