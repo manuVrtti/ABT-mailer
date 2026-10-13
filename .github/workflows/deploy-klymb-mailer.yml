@@ -1,0 +1,40 @@
+# Deploy main to the klymb-mailer Vercel project (https://klymb-mailer.vercel.app).
+#
+# The project lives on a Vercel account that isn't linked to this GitHub
+# repo, so Vercel doesn't deploy it on its own. This uploads the code with the
+# Vercel CLI and Vercel builds it with the project's own environment variables
+# (nothing secret is needed here besides the token).
+#
+# Needs the repository secret VERCEL_TOKEN (a token from that Vercel account).
+# Run by hand from Actions → "Deploy klymb-mailer" → Run workflow.
+name: Deploy klymb-mailer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# One deploy at a time; a newer push replaces a queued one.
+concurrency:
+  group: deploy-klymb-mailer
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_ORG_ID: team_7VctesaUdbi3lQymYwrOvvzT
+      VERCEL_PROJECT_ID: prj_Us8GUazljY73PJBv1Uoq9t21kCaJ
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Deploy to production
+        run: vercel deploy --prod --yes --token "${{ secrets.VERCEL_TOKEN }}"
