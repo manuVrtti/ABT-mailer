@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { klymbFilterSchema, describeKlymbFilter, defaultKlymbFilter } from "../filter";
+import { klymbFilterSchema, describeKlymbFilter, defaultKlymbFilter, formatYears, prettyEventId } from "../filter";
 import { containsPattern, matchedCte } from "../sql";
 import { assertReadOnlySql } from "../client";
 
@@ -136,8 +136,31 @@ describe("describeKlymbFilter", () => {
         userTypes: ["STUDENT"],
       }),
     );
-    expect(lines[0]).toBe("Anyone who is: Hackathon participants (legacy) who did NOT submit");
-    expect(lines).toContain("Except: Workshop registrants (workshop-2026-10-17)");
+    expect(lines[0]).toBe("Anyone who is: Hackathon participants (First hackathon) who did NOT submit");
+    expect(lines).toContain("Except: Workshop registrants (Workshop · 17 Oct 2026)");
     expect(lines).toContain("Only: Students");
+  });
+
+  it("names cohorts when their names are given", () => {
+    const f = parse({ sources: [{ kind: "cohort", cohortIds: ["c1"], statuses: ["ACTIVE"] }] });
+    expect(describeKlymbFilter(f)[0]).toBe("Anyone who is: Cohort / program members (1 selected) — active");
+    expect(describeKlymbFilter(f, { c1: "AI Cohort" })[0]).toBe("Anyone who is: Cohort / program members (AI Cohort) — active");
+  });
+});
+
+describe("prettyEventId", () => {
+  it("turns ids into readable names", () => {
+    expect(prettyEventId("workshop-2026-09-05")).toBe("Workshop · 5 Sep 2026");
+    expect(prettyEventId("linkedin-ai-interview")).toBe("LinkedIn AI Interview");
+    expect(prettyEventId("vicodathon-2-2026")).toBe("Vicodathon 2 2026");
+    expect(prettyEventId("2026-10-17")).toBe("17 Oct 2026");
+  });
+});
+
+describe("formatYears", () => {
+  it("collapses runs into ranges", () => {
+    expect(formatYears([2028, 2026, 2027, 2030])).toBe("2026–2028, 2030");
+    expect(formatYears([2026])).toBe("2026");
+    expect(formatYears([])).toBe("");
   });
 });

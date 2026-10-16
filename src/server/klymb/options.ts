@@ -1,4 +1,5 @@
 import { klymbRead } from "./client";
+import { prettyEventId } from "./filter";
 
 export interface KlymbOption {
   id: string;
@@ -58,14 +59,16 @@ export async function loadKlymbFilterOptions(): Promise<KlymbFilterOptions> {
     );
 
     const plain = (rows: { id: string; n: number }[]) => rows.map((r) => ({ id: r.id, label: r.id, count: r.n }));
+    const pretty = (rows: { id: string; n: number }[]) =>
+      rows.map((r) => ({ id: r.id, label: prettyEventId(r.id), count: r.n }));
     return {
       hackathons: hackathons.map((h) => ({
         id: h.id,
-        label: h.id === "legacy" ? "First hackathon (legacy)" : h.id,
+        label: h.id === "legacy" ? "First hackathon" : prettyEventId(h.id),
         count: h.n,
       })),
-      videothons: plain(videothons),
-      workshops: workshops.map((w) => ({ id: w.id, label: w.title ? `${w.title} (${w.id})` : w.id, count: w.n })),
+      videothons: pretty(videothons),
+      workshops: workshops.map((w) => ({ id: w.id, label: w.title ?? prettyEventId(w.id), count: w.n })),
       cohorts: cohorts.map((c) => ({ id: c.id, label: c.name, count: c.n })),
       graduationYears: years.map((y) => y.y),
       utmSources: plain(utmSources),
