@@ -3,6 +3,7 @@ import {
   buildRowEmail,
   checkRows,
   detectColumns,
+  fileMatches,
   fillVariables,
   htmlToText,
   isBlocking,
@@ -118,6 +119,35 @@ describe("body → email", () => {
 
   it("htmlToText keeps links readable", () => {
     expect(htmlToText('<p>See <a href="https://x.io">this</a></p><ul><li>One</li></ul>')).toBe("See this (https://x.io)\n• One");
+  });
+});
+
+describe("fileMatches", () => {
+  it("matches names written without the extension, ignoring case", () => {
+    expect(fileMatches("klymb_cache_hit_miss", "klymb_cache_hit_miss.gif")).toBe(true);
+    expect(
+      fileMatches("suyashgupta_2200320130174__ab_resume_test_ (1)", "suyashgupta_2200320130174__AB_resume_test_ (1).pdf"),
+    ).toBe(true);
+    expect(fileMatches("Offer.PDF", "offer.pdf")).toBe(true);
+  });
+
+  it("doesn't match a different file or a different extension", () => {
+    expect(fileMatches("offer.pdf", "offer.docx")).toBe(false);
+    expect(fileMatches("offer", "offer-2.pdf")).toBe(false);
+    expect(fileMatches("offer", "my offer.pdf")).toBe(false);
+  });
+
+  it("is what row checks and the sender use", () => {
+    const rows = toRows([{ email: "a@b.co", subject: "s", body: "b", file: "klymb_cache_hit_miss" }], {
+      email: "email",
+      subject: "subject",
+      body: "body",
+      attachment: "file",
+    });
+    expect(checkRows(rows, ["klymb_cache_hit_miss.gif"]).get(1)).toBeUndefined();
+    const r = attachmentsForRow([{ filename: "klymb_cache_hit_miss.gif", forAll: false }], ["klymb_cache_hit_miss"]);
+    expect(r.files.map((f) => f.filename)).toEqual(["klymb_cache_hit_miss.gif"]);
+    expect(r.missing).toEqual([]);
   });
 });
 

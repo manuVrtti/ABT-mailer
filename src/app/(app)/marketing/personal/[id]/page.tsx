@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth/session";
 import { Badge, Card } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { brandForAddress } from "@/server/brands";
+import { fileMatches, fillVariables } from "@/server/direct-send/body";
 import { attachmentsForRow, checkDirectSendReady, renderDirectEmail } from "@/server/direct-send/service";
 import { directSendStats, rowActivity } from "@/server/direct-send/stats";
 import { AttachmentsManager, AutoRefresh, CancelButton, DeleteButton, LaunchButton, TestSend } from "./_controls";
@@ -87,7 +88,7 @@ export default async function DirectSendPage({
       orderBy: { rowNumber: "asc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      select: { rowNumber: true, email: true, name: true, subject: true, attachmentNames: true, emailJobId: true },
+      select: { rowNumber: true, email: true, name: true, subject: true, variables: true, attachmentNames: true, emailJobId: true },
     }),
     isDraft ? checkDirectSendReady(send.id) : Promise.resolve([]),
     db.directSendRow.findMany({ where: { directSendId: send.id }, select: { attachmentNames: true } }),
@@ -95,10 +96,13 @@ export default async function DirectSendPage({
   const activity = await rowActivity(rows.map((r) => r.emailJobId).filter((x): x is string => Boolean(x)));
 
   // How many rows use each file, and which named files are missing.
-  const uses = new Map<string, number>();
-  for (const r of attachmentUse) for (const n of r.attachmentNames) uses.set(n.toLowerCase(), (uses.get(n.toLowerCase()) ?? 0) + 1);
-  const uploaded = new Set(send.attachments.map((a) => a.filename.toLowerCase()));
-  const missing = [...uses.entries()].filter(([n]) => !uploaded.has(n)).map(([name, n]) => ({ name, rows: n }));
+  const names = new Map<string, number>();
+  for (const r of attachmentUse) for (const n of r.attachmentNames) names.set(n, (names.get(n) ?? 0) + 1);
+  const missing = [...names.entries()]
+    .filter(([n]) => !send.attachments.some((a) => fileMatches(n, a.filename)))
+    .map(([name, n]) => ({ name, rows: n }));
+  const usesOf = (filename: string) =>
+    attachmentUse.filter((r) => r.attachmentNames.some((n) => fileMatches(n, filename))).length;
 
   // Preview of one row, exactly as it will be sent.
   const previewNumber = Number(searchParams.row) || 1;
@@ -266,7 +270,7 @@ export default async function DirectSendPage({
                         </Link>
                       </td>
                       <td className="max-w-[240px] px-3 py-2">
-                        <div className="truncate">{r.subject}</div>
+                        <div className="truncate">{fillVariables(r.subject, (r.variables ?? {}) as Record<string, string>, false)}</div>
                         {r.attachmentNames.length > 0 && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Paperclip className="h-3 w-3" /> {r.attachmentNames.length}
@@ -372,7 +376,7 @@ export default async function DirectSendPage({
             <AttachmentsManager
               id={send.id}
               editable={isDraft && canEdit}
-              attachments={send.attachments.map((a) => ({ ...a, uses: uses.get(a.filename.toLowerCase()) ?? 0 }))}
+              attachments={send.attachments.map((a) => ({ ...a, uses: usesOf(a.filename) }))}
               missing={missing}
             />
           </Card>

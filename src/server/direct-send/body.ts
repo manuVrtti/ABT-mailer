@@ -64,6 +64,26 @@ export function parseAttachmentNames(cell: string | undefined | null): string[] 
   );
 }
 
+const EXT_RE = /\.[a-z0-9]{1,8}$/i;
+const fileKey = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+
+/**
+ * Does a name from the CSV's attachment column refer to this uploaded file?
+ * Case-insensitive; a name written without an extension matches the file of
+ * that name with any extension ("Offer Letter" → "offer letter.pdf").
+ */
+export function fileMatches(csvName: string, fileName: string): boolean {
+  const want = fileKey(csvName);
+  const have = fileKey(fileName);
+  if (want === have) return true;
+  return !EXT_RE.test(want) && have.replace(EXT_RE, "") === want;
+}
+
+/** The uploaded files a CSV name refers to (usually one). */
+export function findFiles<T>(csvName: string, files: T[], nameOf: (f: T) => string): T[] {
+  return files.filter((f) => fileMatches(csvName, nameOf(f)));
+}
+
 /** CSV header → {{variable}} name: "First Name" → "first_name". */
 export function variableKey(header: string): string {
   return header
@@ -126,11 +146,11 @@ export const ISSUE_LABELS: Record<RowIssue, string> = {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /**
- * Problems per row. `fileNames` = uploaded attachment names; matching is
- * case-insensitive so "Offer.PDF" in the CSV finds "offer.pdf".
+ * Problems per row. `fileNames` = uploaded attachment names, matched with
+ * fileMatches (case-insensitive, extension optional).
  */
 export function checkRows(rows: DirectRow[], fileNames: string[]): Map<number, RowIssue[]> {
-  const files = new Set(fileNames.map((f) => f.toLowerCase()));
+  const hasFile = (n: string) => fileNames.some((f) => fileMatches(n, f));
   const seen = new Map<string, number>();
   for (const r of rows) seen.set(r.email, (seen.get(r.email) ?? 0) + 1);
   const out = new Map<number, RowIssue[]>();
@@ -142,7 +162,7 @@ export function checkRows(rows: DirectRow[], fileNames: string[]): Map<number, R
     if (r.subject.length > DIRECT_SEND_LIMITS.subjectChars || r.body.length > DIRECT_SEND_LIMITS.bodyChars) {
       issues.push("too_long");
     }
-    if (r.attachmentNames.some((n) => !files.has(n.toLowerCase()))) issues.push("missing_file");
+    if (r.attachmentNames.some((n) => !hasFile(n))) issues.push("missing_file");
     if (r.email && (seen.get(r.email) ?? 0) > 1) issues.push("duplicate_email");
     if (issues.length) out.set(r.rowNumber, issues);
   }
