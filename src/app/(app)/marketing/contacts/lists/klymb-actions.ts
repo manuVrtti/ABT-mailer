@@ -10,6 +10,7 @@ import { normalizeEmail } from "@/lib/utils";
 import { describeKlymbFilter, klymbFilterSchema } from "@/server/klymb/filter";
 import { previewKlymbFilter, type KlymbPreview } from "@/server/klymb/people";
 import { refreshKlymbList, type KlymbSyncStats } from "@/server/klymb/sync";
+import { SUGGEST_FIELDS, suggestKlymbValues, type Suggestion, type SuggestField } from "@/server/klymb/suggest";
 import { CONTACT_LIST_COLORS } from "./_constants";
 
 const listMetaSchema = z.object({
@@ -55,6 +56,17 @@ export async function previewKlymbListFilter(filterJson: string): Promise<Previe
     return { ok: true, preview: await previewKlymbFilter(parsed.data) };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
+  }
+}
+
+/** Type-ahead values for one filter field. Reads Klymb; writes nothing. */
+export async function suggestKlymbFilterValues(field: string, q: string): Promise<Suggestion[]> {
+  await requireRole([Role.ADMIN, Role.MARKETER]);
+  if (!(SUGGEST_FIELDS as readonly string[]).includes(field)) return [];
+  try {
+    return await suggestKlymbValues(field as SuggestField, q);
+  } catch {
+    return [];
   }
 }
 
