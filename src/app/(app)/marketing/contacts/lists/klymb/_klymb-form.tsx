@@ -23,9 +23,10 @@ import {
   Video,
   X,
   BadgeCheck,
+  Check,
   School,
 } from "lucide-react";
-import { Button, Input, Select } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import {
   COHORT_STATUSES,
@@ -43,7 +44,7 @@ import {
 import type { KlymbFilterOptions, KlymbOption } from "@/server/klymb/options";
 import type { KlymbPreview } from "@/server/klymb/people";
 import { CONTACT_LIST_COLORS } from "../_constants";
-import { createKlymbList, previewKlymbListFilter, updateKlymbList } from "../klymb-actions";
+import { createKlymbList, previewKlymbListFilter, suggestKlymbFilterValues, updateKlymbList } from "../klymb-actions";
 
 // ---------------------------------------------------------------------------
 // Static copy
@@ -1024,25 +1025,40 @@ function ExtraFilterBody({
 }) {
   switch (k) {
     case "grad":
-      return <GradYears value={filter.graduationYears} years={options.graduationYears} onChange={(graduationYears) => update({ graduationYears })} />;
+      return (
+        <GradYears
+          value={filter.graduationYears}
+          years={options.graduationYears}
+          onChange={(graduationYears) => update({ graduationYears })}
+        />
+      );
     case "college":
       return (
         <IncludeExclude
+          field="college"
           value={filter.colleges}
           onChange={(colleges) => update({ colleges })}
-          placeholder="e.g. ABES — press Enter"
+          placeholder="Type a college, e.g. abes"
         />
       );
     case "company":
       return (
         <IncludeExclude
+          field="company"
           value={filter.companies}
           onChange={(companies) => update({ companies })}
-          placeholder="e.g. EXL — press Enter"
+          placeholder="Type a company, e.g. exl"
         />
       );
     case "city":
-      return <TagInput value={filter.cities} onChange={(cities) => update({ cities })} placeholder="e.g. Noida, Delhi — press Enter" />;
+      return (
+        <MultiSuggest
+          field="city"
+          value={filter.cities}
+          onChange={(cities) => update({ cities })}
+          placeholder="Type a city or state, e.g. noida"
+        />
+      );
     case "signup":
       return (
         <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -1066,18 +1082,18 @@ function ExtraFilterBody({
       return (
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Source">
-            <TagInput
+            <MultiSuggest
+              field="utm_source"
               value={filter.utmSources}
               onChange={(utmSources) => update({ utmSources })}
-              suggestions={options.utmSources}
               placeholder="e.g. instagram"
             />
           </Field>
           <Field label="Campaign">
-            <TagInput
+            <MultiSuggest
+              field="utm_campaign"
               value={filter.utmCampaigns}
               onChange={(utmCampaigns) => update({ utmCampaigns })}
-              suggestions={options.utmCampaigns}
               placeholder="e.g. oct-hackathon"
             />
           </Field>
@@ -1088,153 +1104,301 @@ function ExtraFilterBody({
   }
 }
 
-/** Graduation years as a from–to range, stored as the list of years in it. */
+/** Graduation years: tick years in a searchable list, or use a quick pick. */
 function GradYears({ value, years, onChange }: { value: number[]; years: number[]; onChange: (v: number[]) => void }) {
-  const sorted = [...years].sort((a, b) => a - b);
-  const from = value.length ? Math.min(...value) : undefined;
-  const to = value.length ? Math.max(...value) : undefined;
   const thisYear = new Date().getFullYear();
-  const set = (f?: number, t?: number) => {
-    if (f === undefined && t === undefined) return onChange([]);
-    const lo = f ?? sorted[0]!;
-    const hi = t ?? sorted[sorted.length - 1]!;
-    const range: number[] = [];
-    for (let y = Math.min(lo, hi); y <= Math.max(lo, hi); y++) range.push(y);
-    onChange(range);
-  };
-  const quick: [string, number, number][] = [
-    [`${thisYear}`, thisYear, thisYear],
-    [`${thisYear + 1}`, thisYear + 1, thisYear + 1],
-    [`${thisYear}–${thisYear + 2}`, thisYear, thisYear + 2],
-    [`Already graduated`, sorted[0] ?? thisYear - 30, thisYear - 1],
+  const range = (lo: number, hi: number) => years.filter((y) => y >= lo && y <= hi);
+  const quick: [string, number[]][] = [
+    [`${thisYear}`, [thisYear]],
+    [`${thisYear + 1}`, [thisYear + 1]],
+    [`${thisYear}–${thisYear + 2}`, range(thisYear, thisYear + 2)],
+    ["Already graduated", range(0, thisYear - 1)],
   ];
+  const same = (a: number[], b: number[]) => a.length === b.length && a.every((y) => b.includes(y));
+  const yearOptions = useMemo(() => [...years].sort((a, b) => b - a).map((y) => ({ value: String(y) })), [years]);
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted-foreground">From</span>
-        <Select
-          value={from ?? ""}
-          onChange={(e) => set(e.target.value ? Number(e.target.value) : undefined, to)}
-          className="w-auto py-1.5"
-        >
-          <option value="">Any</option>
-          {sorted.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </Select>
-        <span className="text-muted-foreground">to</span>
-        <Select
-          value={to ?? ""}
-          onChange={(e) => set(from, e.target.value ? Number(e.target.value) : undefined)}
-          className="w-auto py-1.5"
-        >
-          <option value="">Any</option>
-          {sorted.map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </Select>
-        {value.length > 0 && <span className="text-xs text-muted-foreground">({formatYears(value)})</span>}
-      </div>
       <div className="flex flex-wrap gap-1.5">
-        {quick.map(([label, f, t]) => (
-          <TypeChip key={label} active={from === f && to === t} onClick={() => set(f, t)}>
+        {quick.map(([label, ys]) => (
+          <TypeChip
+            key={label}
+            active={value.length > 0 && same(value, ys)}
+            onClick={() => onChange(same(value, ys) ? [] : ys)}
+          >
             {label}
           </TypeChip>
         ))}
       </div>
+      <MultiSuggest
+        value={value.map(String)}
+        onChange={(v) => onChange(v.map(Number).filter(Number.isFinite).sort((a, b) => b - a))}
+        staticOptions={yearOptions}
+        placeholder="Or pick years — type e.g. 2026"
+        allowCustom={false}
+      />
+      {value.length > 0 && <p className="text-xs text-muted-foreground">Selected: {formatYears(value)}</p>}
     </div>
   );
 }
 
 function IncludeExclude({
+  field,
   value,
   onChange,
   placeholder,
 }: {
+  field: SuggestFieldName;
   value: { include: string[]; exclude: string[] };
   onChange: (v: { include: string[]; exclude: string[] }) => void;
   placeholder: string;
 }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <Field label="Contains any of">
-        <TagInput value={value.include} onChange={(include) => onChange({ ...value, include })} placeholder={placeholder} />
+      <Field label="Any of these">
+        <MultiSuggest
+          field={field}
+          value={value.include}
+          onChange={(include) => onChange({ ...value, include })}
+          placeholder={placeholder}
+        />
       </Field>
-      <Field label="But not">
-        <TagInput value={value.exclude} onChange={(exclude) => onChange({ ...value, exclude })} placeholder="optional" tone="exclude" />
+      <Field label="But not these">
+        <MultiSuggest
+          field={field}
+          value={value.exclude}
+          onChange={(exclude) => onChange({ ...value, exclude })}
+          placeholder="optional"
+          tone="exclude"
+        />
       </Field>
     </div>
   );
 }
 
-/** Words as removable chips. Enter or comma adds one. */
-function TagInput({
+type SuggestFieldName = "college" | "company" | "city" | "utm_source" | "utm_campaign";
+type SuggestRow = { value: string; count?: number };
+
+/**
+ * Multi-select with search. Type 2+ letters and matching values from Klymb
+ * (with how many people have each) appear with checkboxes; tick as many as
+ * you like. With `staticOptions` the list is local and opens on focus.
+ * Selected values match any name that contains them, ignoring case.
+ */
+function MultiSuggest({
+  field,
   value,
   onChange,
   placeholder,
-  suggestions,
   tone = "default",
+  staticOptions,
+  allowCustom = true,
 }: {
+  field?: SuggestFieldName;
   value: string[];
   onChange: (v: string[]) => void;
   placeholder?: string;
-  suggestions?: KlymbOption[];
   tone?: "default" | "exclude";
+  staticOptions?: SuggestRow[];
+  allowCustom?: boolean;
 }) {
+  const MIN = staticOptions ? 0 : 2;
   const [text, setText] = useState("");
-  const listId = useRef(`tags-${Math.random().toString(36).slice(2)}`).current;
-  const add = (raw: string) => {
-    const parts = raw.split(",").map((s) => s.trim()).filter(Boolean);
-    if (parts.length) onChange(Array.from(new Set([...value, ...parts])));
-    setText("");
-  };
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<SuggestRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [active, setActive] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const seq = useRef(0);
+  const q = text.trim();
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  // Fetch matches 250 ms after typing stops; a slower, older answer is dropped.
+  useEffect(() => {
+    setActive(0);
+    if (staticOptions) {
+      setRows(q ? staticOptions.filter((o) => o.value.toLowerCase().includes(q.toLowerCase())) : staticOptions);
+      return;
+    }
+    if (q.length < MIN || !field) {
+      seq.current++;
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    const mine = ++seq.current;
+    setLoading(true);
+    const t = setTimeout(async () => {
+      const res = await suggestKlymbFilterValues(field, q);
+      if (mine !== seq.current) return;
+      setRows(res);
+      setLoading(false);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q, field, staticOptions, MIN]);
+
+  const isOn = (v: string) => value.some((x) => x.toLowerCase() === v.toLowerCase());
+  const toggleValue = (v: string) =>
+    onChange(isOn(v) ? value.filter((x) => x.toLowerCase() !== v.toLowerCase()) : [...value, v]);
+  const showCustom =
+    allowCustom && q.length >= Math.max(MIN, 1) && !rows.some((r) => r.value.toLowerCase() === q.toLowerCase());
+  // Keyboard order: the "anything containing" row first, then the matches.
+  const entries: SuggestRow[] = [...(showCustom ? [{ value: q }] : []), ...rows];
+
+  const chip =
+    tone === "exclude"
+      ? "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200"
+      : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200";
+
   return (
-    <div className="flex min-h-[38px] flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1 focus-within:ring-2 focus-within:ring-ring">
-      {value.map((v) => (
-        <span
-          key={v}
-          className={cn(
-            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
-            tone === "exclude"
-              ? "bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-200"
-              : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-200",
+    <div ref={boxRef} className="relative">
+      <div
+        onClick={() => {
+          inputRef.current?.focus();
+          setOpen(true);
+        }}
+        className={cn(
+          "flex min-h-[40px] cursor-text flex-wrap items-center gap-1.5 rounded-md border bg-background px-2 py-1",
+          open ? "border-emerald-500 ring-2 ring-emerald-500/20" : "border-input",
+        )}
+      >
+        {value.map((v) => (
+          <span key={v} className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs", chip)}>
+            {v}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onChange(value.filter((x) => x !== v));
+              }}
+              aria-label={`Remove ${v}`}
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          value={text}
+          placeholder={value.length ? "Add more…" : placeholder}
+          onFocus={() => setOpen(true)}
+          onChange={(e) => {
+            setText(e.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setOpen(true);
+              setActive((a) => Math.min(a + 1, Math.max(entries.length - 1, 0)));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setActive((a) => Math.max(a - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              const pick = entries[active];
+              if (pick) toggleValue(pick.value);
+            } else if (e.key === "Escape") {
+              setOpen(false);
+            } else if (e.key === "Backspace" && !text && value.length) {
+              onChange(value.slice(0, -1));
+            }
+          }}
+          className="min-w-[140px] flex-1 bg-transparent py-1 text-sm outline-none"
+        />
+        {loading && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />}
+      </div>
+
+      {open && (
+        <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-border bg-white shadow-lg dark:bg-slate-900">
+          {q.length < MIN ? (
+            <div className="px-3 py-3 text-xs text-muted-foreground">Type at least {MIN} letters to search Klymb.</div>
+          ) : (
+            <ul className="max-h-64 overflow-y-auto py-1">
+              {entries.map((r, i) => {
+                const custom = showCustom && i === 0;
+                const on = isOn(r.value);
+                return (
+                  <li key={`${custom ? "custom:" : ""}${r.value}`}>
+                    <button
+                      type="button"
+                      onMouseEnter={() => setActive(i)}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => toggleValue(r.value)}
+                      className={cn(
+                        "flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm",
+                        i === active && "bg-slate-50 dark:bg-slate-800",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "grid h-4 w-4 shrink-0 place-items-center rounded border",
+                          on
+                            ? tone === "exclude"
+                              ? "border-rose-500 bg-rose-500 text-white"
+                              : "border-emerald-500 bg-emerald-500 text-white"
+                            : "border-slate-300 dark:border-slate-600",
+                        )}
+                      >
+                        {on && <Check className="h-3 w-3" />}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">
+                        {custom ? (
+                          <>
+                            Anything containing &ldquo;<b>{r.value}</b>&rdquo;
+                          </>
+                        ) : (
+                          r.value
+                        )}
+                      </span>
+                      {r.count !== undefined && (
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {r.count.toLocaleString()} {r.count === 1 ? "person" : "people"}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+              {loading && rows.length === 0 && (
+                <li className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Searching Klymb…
+                </li>
+              )}
+              {!loading && entries.length === 0 && (
+                <li className="px-3 py-2 text-xs text-muted-foreground">No matches in Klymb.</li>
+              )}
+            </ul>
           )}
-        >
-          {v}
-          <button type="button" onClick={() => onChange(value.filter((x) => x !== v))} aria-label={`Remove ${v}`}>
-            <X className="h-3 w-3" />
-          </button>
-        </span>
-      ))}
-      <input
-        value={text}
-        list={suggestions ? listId : undefined}
-        placeholder={value.length ? "" : placeholder}
-        onChange={(e) => {
-          if (e.target.value.endsWith(",")) add(e.target.value);
-          else setText(e.target.value);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            add(text);
-          } else if (e.key === "Backspace" && !text && value.length) {
-            onChange(value.slice(0, -1));
-          }
-        }}
-        onBlur={() => text && add(text)}
-        className="min-w-[120px] flex-1 bg-transparent py-1 text-sm outline-none"
-      />
-      {suggestions && (
-        <datalist id={listId}>
-          {suggestions.map((s) => (
-            <option key={s.id} value={s.id}>{`${s.count} people`}</option>
-          ))}
-        </datalist>
+          <div className="flex items-center justify-between border-t border-border/60 bg-slate-50/80 px-3 py-1.5 text-xs text-muted-foreground dark:bg-slate-800/40">
+            <span>
+              {value.length} selected
+              {value.length > 0 && (
+                <button type="button" onClick={() => onChange([])} className="ml-2 text-rose-600 hover:underline">
+                  Clear
+                </button>
+              )}
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false);
+                setText("");
+              }}
+              className="font-medium text-emerald-700 hover:underline dark:text-emerald-300"
+            >
+              Done
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
