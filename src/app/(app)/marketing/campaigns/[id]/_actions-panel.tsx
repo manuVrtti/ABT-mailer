@@ -12,17 +12,49 @@ import {
 } from "../actions";
 import type { CampaignStatus } from "@prisma/client";
 
+type TypeCounts = Record<"STUDENT" | "PROFESSIONAL" | "RECRUITER" | "UNKNOWN" | "NOT_SET", number>;
+
+const TYPE_LABELS: [keyof TypeCounts, string][] = [
+  ["STUDENT", "Students"],
+  ["PROFESSIONAL", "Professionals"],
+  ["RECRUITER", "Recruiters"],
+  ["UNKNOWN", "Unknown type"],
+  ["NOT_SET", "Imported (no type)"],
+];
+
+function ago(iso: string | null): string {
+  if (!iso) return "never";
+  const s = Math.round((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.round(s / 60)} min ago`;
+  if (s < 86_400) return `${Math.round(s / 3600)} h ago`;
+  return `on ${iso.slice(0, 10)}`;
+}
+
 export function ActionsPanel({
   id,
   status,
   audienceSize,
+  audienceTypes,
+  klymbLists = [],
 }: {
   id: string;
   status: CampaignStatus;
   audienceSize: number | null;
+  audienceTypes?: TypeCounts | null;
+  klymbLists?: { id: string; name: string; syncedAt: string | null; syncError: string | null }[];
 }) {
   const [pending, start] = useTransition();
-  const [estimate, setEstimate] = useState<{ matching: number; suppressed: number; final: number; costUsd: number } | null>(null);
+  const [estimate, setEstimate] = useState<{
+    matching: number;
+    suppressed: number;
+    final: number;
+    costUsd: number;
+    byType: TypeCounts;
+  } | null>(null);
+  const types = estimate?.byType ?? audienceTypes ?? null;
+  const sensitive = types ? types.PROFESSIONAL + types.RECRUITER : 0;
+  const hasKlymb = klymbLists.length > 0;
   const [testTo, setTestTo] = useState("");
   const [testResult, setTestResult] = useState<string | null>(null);
   const [scheduledFor, setScheduledFor] = useState("");
@@ -47,6 +79,30 @@ export function ActionsPanel({
               Last saved size: {audienceSize?.toLocaleString() ?? "—"}. Click <b>Refresh</b> for a fresh estimate.
             </div>
           )}
+          {types && (
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              {TYPE_LABELS.filter(([k]) => types[k] > 0).map(([k, label]) => (
+                <span key={k} className={k === "PROFESSIONAL" || k === "RECRUITER" ? "font-semibold text-amber-700 dark:text-amber-300" : ""}>
+                  {label}: <span className="tabular-nums">{types[k].toLocaleString()}</span>
+                </span>
+              ))}
+            </div>
+          )}
+          {hasKlymb && (
+            <div className="mt-2 text-xs text-muted-foreground">
+              Live Klymb list{klymbLists.length === 1 ? "" : "s"}:{" "}
+              {klymbLists.map((l, i) => (
+                <span key={l.id}>
+                  {i > 0 && ", "}
+                  <a href={`/marketing/contacts/lists/${l.id}`} className="text-emerald-700 hover:underline dark:text-emerald-300">
+                    {l.name}
+                  </a>{" "}
+                  {l.syncError ? <span className="text-destructive">(last refresh failed)</span> : `(refreshed ${ago(l.syncedAt)})`}
+                </span>
+              ))}
+              . They refresh again automatically when the campaign sends.
+            </div>
+          )}
         </div>
         <Button
           type="button"
@@ -55,13 +111,20 @@ export function ActionsPanel({
           onClick={() =>
             start(async () => {
               setError(null);
-              const res = await estimateCampaign(id);
-              if (res.ok) setEstimate({ matching: res.matching, suppressed: res.suppressed, final: res.final, costUsd: res.costUsd });
-              else setError(res.error);
+              const res = await estimateCampaign(id, { refreshKlymb: hasKlymb });
+              if (res.ok) {
+                setEstimate({
+                  matching: res.matching,
+                  suppressed: res.suppressed,
+                  final: res.final,
+                  costUsd: res.costUsd,
+                  byType: res.byType,
+                });
+              } else setError(res.error);
             })
           }
         >
-          {pending ? "Estimating…" : "Refresh estimate"}
+          {pending ? (hasKlymb ? "Refreshing from Klymb…" : "Estimating…") : "Refresh estimate"}
         </Button>
       </Card>
 
@@ -110,6 +173,17 @@ export function ActionsPanel({
                 Uncheck &quot;Send now&quot; and pick a time here to schedule.
               </p>
             </div>
+            {sensitive > 0 && types && (
+              <label className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">
+                <input name="confirmAudience" type="checkbox" required className="mt-0.5 h-4 w-4" />
+                <span>
+                  <b>I mean to email professionals / recruiters.</b> This audience includes{" "}
+                  {types.PROFESSIONAL.toLocaleString()} professional{types.PROFESSIONAL === 1 ? "" : "s"} and{" "}
+                  {types.RECRUITER.toLocaleString()} recruiter{types.RECRUITER === 1 ? "" : "s"}. If this mail is only for
+                  students, change the audience instead.
+                </span>
+              </label>
+            )}
             <div className="flex justify-end gap-2">
               <Button type="submit" variant="primary">
                 {status === "SCHEDULED" ? "Update schedule / launch" : "Launch"}

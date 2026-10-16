@@ -5,11 +5,12 @@ import { PageHeader, Card, Badge } from "@/components/ui";
 import { ActionsPanel } from "./_actions-panel";
 import { RecipientActivitySection, parseActivityFilter } from "./_recipient-activity";
 import { CampaignStatus } from "@prisma/client";
-import { campaignListIds } from "@/server/campaigns/audience";
+import { campaignAudienceSummary, campaignListIds } from "@/server/campaigns/audience";
 
 export const dynamic = "force-dynamic";
 // Launch/resume server actions run here; the launcher self-limits to ~40s.
-export const maxDuration = 60;
+// Launching refreshes live Klymb lists before the fan-out starts.
+export const maxDuration = 120;
 
 const statusTone: Record<CampaignStatus, "muted" | "success" | "warning" | "destructive" | "info"> = {
   DRAFT: "muted",
@@ -48,6 +49,7 @@ export default async function CampaignDetailPage({
       ? await db.contactList.findMany({ where: { id: { in: listIds } }, select: { id: true, name: true } })
       : [];
   lists.sort((a, b) => listIds.indexOf(a.id) - listIds.indexOf(b.id));
+  const summary = await campaignAudienceSummary(campaign.id);
 
   return (
     <div className="space-y-6">
@@ -131,7 +133,13 @@ export default async function CampaignDetailPage({
           </div>
         </div>
 
-        <ActionsPanel id={campaign.id} status={campaign.status} audienceSize={campaign.segment?.audienceSize ?? null} />
+        <ActionsPanel
+          id={campaign.id}
+          status={campaign.status}
+          audienceSize={campaign.segment?.audienceSize ?? null}
+          audienceTypes={summary.types}
+          klymbLists={summary.klymbLists}
+        />
       </div>
 
       {campaign.startedAt && (

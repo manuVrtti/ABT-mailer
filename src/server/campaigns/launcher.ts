@@ -12,6 +12,7 @@ import { isQStashConfigured } from "@/server/queue/qstash";
 import { unsubscribeUrl } from "@/server/unsubscribe/token";
 import { brandForAddress } from "@/server/brands";
 import { addUtmToHtml } from "@/server/utm/rewrite";
+import { refreshKlymbListsForCampaign } from "@/server/klymb/sync";
 
 // Contacts per DB round. Each batch is ~7 queries + 2 QStash batch calls.
 const BATCH_SIZE = 200;
@@ -91,6 +92,13 @@ export async function launchCampaignFanout(
     ? listsAudienceWhere(listIds)
     : compileWhere(ruleTreeSchema.parse(campaign.segment!.rules));
 
+  // Live Klymb lists are refreshed before anything is queued, so whoever
+  // registered a minute ago is included. A failed refresh throws and leaves
+  // the campaign where it was. The time counts against this call's budget.
+  if (!opts.afterContactId) {
+    await refreshKlymbListsForCampaign(listIds, campaign.createdById);
+  }
+
   // First batch: flip to SENDING and freeze the template for this campaign.
   if (!opts.afterContactId) {
     await db.campaign.update({
@@ -146,7 +154,18 @@ export async function launchCampaignFanout(
 
 async function processBatch(
   campaign: { id: string; slug: string; subject: string; templateId: string | null; fromEmail: string; fromName: string; replyTo: string | null },
-  batch: { id: string; email: string; firstName: string | null; lastName: string | null; college: string | null; branch: string | null; year: string | null }[],
+  batch: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    college: string | null;
+    branch: string | null;
+    year: string | null;
+    graduationYear: number | null;
+    company: string | null;
+    userType: string | null;
+  }[],
   brandKey: string,
 ): Promise<{ enqueued: number; skipped: number }> {
   const suppression = await checkSuppressionBulk(
@@ -166,6 +185,9 @@ async function processBatch(
       college: contact.college ?? "",
       branch: contact.branch ?? "",
       year: contact.year ?? "",
+      graduation_year: contact.graduationYear ?? "",
+      company: contact.company ?? "",
+      user_type: contact.userType ? contact.userType.toLowerCase() : "",
       email: contact.email,
     };
     let subject: string;
