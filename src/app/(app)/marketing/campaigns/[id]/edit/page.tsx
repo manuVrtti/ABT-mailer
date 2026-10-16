@@ -26,12 +26,13 @@ import {
 import { ActionsPanel } from "../_actions-panel";
 import { RecipientsPicker } from "./_recipients-picker";
 import { DesignStudio } from "./_design-studio";
-import { campaignListIds, countListsAudience } from "@/server/campaigns/audience";
+import { campaignAudienceSummary, campaignListIds, countListsAudience } from "@/server/campaigns/audience";
 import { listBrands } from "@/server/brands";
 
 export const dynamic = "force-dynamic";
 // Launch server action runs here; the launcher self-limits to ~40s.
-export const maxDuration = 60;
+// Launching refreshes live Klymb lists before the fan-out starts.
+export const maxDuration = 120;
 export const metadata = { title: "Edit campaign" };
 
 type OpenSection = "sender" | "recipients" | "subject" | "design" | null;
@@ -59,11 +60,12 @@ export default async function CampaignEditPage({
   const open = normalizeOpen(searchParams.open);
 
   const listIds = campaignListIds(campaign);
-  const [selectedLists, listsAudience] = await Promise.all([
+  const [selectedLists, listsAudience, summary] = await Promise.all([
     listIds.length > 0
       ? db.contactList.findMany({ where: { id: { in: listIds } }, select: { id: true, name: true } })
       : Promise.resolve([]),
     countListsAudience(listIds),
+    campaignAudienceSummary(campaign.id),
   ]);
   // Preserve the order the user picked them in.
   selectedLists.sort((a, b) => listIds.indexOf(a.id) - listIds.indexOf(b.id));
@@ -115,7 +117,13 @@ export default async function CampaignEditPage({
       {/* Send / schedule footer — always visible; controls disabled until all sections are ready. */}
       <div className="mt-4">
         {allReady ? (
-          <ActionsPanel id={campaign.id} status={campaign.status} audienceSize={audienceSize} />
+          <ActionsPanel
+            id={campaign.id}
+            status={campaign.status}
+            audienceSize={audienceSize}
+            audienceTypes={summary.types}
+            klymbLists={summary.klymbLists}
+          />
         ) : (
           <Card className="border-dashed">
             <div className="text-sm font-semibold">Almost there</div>

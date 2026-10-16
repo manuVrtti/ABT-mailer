@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { ContactSource, Role } from "@prisma/client";
+import { ContactListKind, ContactSource, ListOverrideMode, Role } from "@prisma/client";
 import Papa from "papaparse";
 import { z } from "zod";
 import { db } from "@/lib/db";
@@ -266,8 +266,24 @@ function stripUndefined<T extends Record<string, unknown>>(o: T): Partial<T> {
 }
 
 export async function removeMember(listId: string, contactId: string) {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
-  await db.contactListMember.delete({ where: { contactId_listId: { contactId, listId } } });
+  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const list = await db.contactList.findUnique({ where: { id: listId }, select: { kind: true } });
+  // On a Klymb list the next refresh would add them straight back, so the
+  // removal is remembered as an "always exclude" for their address.
+  if (list?.kind === ContactListKind.KLYMB) {
+    const contact = await db.marketingContact.findUnique({ where: { id: contactId }, select: { email: true } });
+    if (contact) {
+      await db.contactListOverride.upsert({
+        where: { listId_email: { listId, email: contact.email } },
+        create: { listId, email: contact.email, mode: ListOverrideMode.EXCLUDE },
+        update: { mode: ListOverrideMode.EXCLUDE },
+      });
+      await db.auditLog.create({
+        data: { userId: user.id, action: "list.klymb_exclude", resource: `list:${listId}`, metadata: { count: 1 }, result: "success" },
+      });
+    }
+  }
+  await db.contactListMember.deleteMany({ where: { contactId, listId } });
   revalidatePath(`/marketing/contacts/lists/${listId}`);
 }
 

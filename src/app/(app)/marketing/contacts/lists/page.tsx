@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ListChecks, Plus, Search, Users } from "lucide-react";
+import { DatabaseZap, ListChecks, Plus, Search, Users } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { PageHeader, Button, EmptyState } from "@/components/ui";
@@ -74,10 +74,16 @@ export default async function ContactListsPage({
         icon={ListChecks}
         description="Named buckets of contacts — Candidates, Recruiters, Hackathon Participants, etc. A contact can belong to many lists."
         actions={
-          <Button as="a" href="/marketing/contacts/lists/new">
-            <Plus className="mr-1 h-4 w-4" />
-            New list
-          </Button>
+          <>
+            <Button as="a" variant="secondary" href="/marketing/contacts/lists/new">
+              <Plus className="mr-1 h-4 w-4" />
+              New list
+            </Button>
+            <Button as="a" href="/marketing/contacts/lists/klymb/new">
+              <DatabaseZap className="mr-1 h-4 w-4" />
+              New Klymb list
+            </Button>
+          </>
         }
       />
 
@@ -172,8 +178,8 @@ export default async function ContactListsPage({
                         <div className="mt-1 line-clamp-2 text-xs text-white/80">{l.description}</div>
                       )}
                     </div>
-                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/20">
-                      <ListChecks className="h-5 w-5" />
+                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/20" title={l.kind === "KLYMB" ? "Live Klymb list" : undefined}>
+                      {l.kind === "KLYMB" ? <DatabaseZap className="h-5 w-5" /> : <ListChecks className="h-5 w-5" />}
                     </div>
                   </div>
                 </div>
@@ -185,9 +191,15 @@ export default async function ContactListsPage({
                     </span>{" "}
                     contacts
                   </span>
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip}`}>
-                    {l.color}
-                  </span>
+                  {l.kind === "KLYMB" ? (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${l.syncError ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300" : chip}`}>
+                      {l.syncError ? "Live · refresh failed" : "Live · Klymb"}
+                    </span>
+                  ) : (
+                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip}`}>
+                      {l.color}
+                    </span>
+                  )}
                 </div>
               </Link>
             );

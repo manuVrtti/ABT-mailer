@@ -118,6 +118,22 @@ enum ContactSource {
   @@map("contact_source")
 }
 
+// STATIC lists are filled by hand / CSV. KLYMB lists are live: their members
+// are recomputed from the Klymb database by `klymbFilter` on every refresh.
+enum ContactListKind {
+  STATIC
+  KLYMB
+
+  @@map("contact_list_kind")
+}
+
+enum ListOverrideMode {
+  INCLUDE
+  EXCLUDE
+
+  @@map("list_override_mode")
+}
+
 enum ImportJobStatus {
   PENDING
   PARSING
@@ -178,6 +194,10 @@ model MarketingContact {
   year               String?
   graduationYear     Int?          @map("graduation_year")
   registrationStatus String?       @map("registration_status") // e.g. NOT_REGISTERED / REGISTERED
+  company            String?
+  // STUDENT / PROFESSIONAL / RECRUITER / UNKNOWN — set by Klymb list refreshes.
+  userType           String?       @map("user_type")
+  klymbUserId        String?       @map("klymb_user_id")
   source             ContactSource @default(IMPORT)
   consentStatus      ConsentStatus @default(IMPLIED) @map("consent_status")
   consentDate        DateTime?     @map("consent_date")
@@ -195,6 +215,8 @@ model MarketingContact {
   @@index([registrationStatus])
   @@index([consentStatus])
   @@index([createdAt])
+  @@index([userType])
+  @@index([klymbUserId])
   @@map("marketing_contacts")
 }
 
@@ -248,13 +270,37 @@ model ContactList {
   name        String   @unique
   description String?
   color       String   @default("emerald") // one of: emerald / teal / sky / amber / rose / violet / slate
+  kind        ContactListKind @default(STATIC)
+  // KLYMB lists only: the audience filter (src/server/klymb/filter.ts).
+  klymbFilter Json?     @map("klymb_filter")
+  syncedAt    DateTime? @map("synced_at")
+  // Last refresh: { matched, added, removed, updated, byType, ms }.
+  syncStats   Json?     @map("sync_stats")
+  // Last refresh failure, cleared by the next successful one.
+  syncError   String?   @map("sync_error")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   members   ContactListMember[]
+  overrides ContactListOverride[]
   campaigns Campaign[]
 
   @@map("contact_lists")
+}
+
+// Hand-made exceptions on a KLYMB list: INCLUDE adds an address whatever the
+// filter says, EXCLUDE keeps one out even when the filter matches it. Stored
+// by address so they survive refreshes and contacts being re-created.
+model ContactListOverride {
+  listId    String           @map("list_id")
+  email     String // normalized (lowercased)
+  mode      ListOverrideMode
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  list ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+
+  @@id([listId, email])
+  @@map("contact_list_overrides")
 }
 
 model ContactListMember {
