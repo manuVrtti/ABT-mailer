@@ -99,18 +99,37 @@ export const SOURCE_LABELS: Record<SourceKind, string> = {
   job_applicants: "Applied to a job",
 };
 
+/** Event / cohort id → readable name. Cohort ids are opaque, so pass their names in `names`. */
+export function eventName(id: string, names: Record<string, string> = {}): string {
+  return names[id] ?? (id === "legacy" ? "First hackathon" : prettyEventId(id));
+}
+
+/** [2026, 2027, 2028, 2030] → "2026–2028, 2030". */
+export function formatYears(years: number[]): string {
+  const ys = [...new Set(years)].sort((a, b) => a - b);
+  const parts: string[] = [];
+  for (let i = 0; i < ys.length; ) {
+    let j = i;
+    while (j + 1 < ys.length && ys[j + 1] === ys[j]! + 1) j++;
+    parts.push(j > i ? `${ys[i]}–${ys[j]}` : `${ys[i]}`);
+    i = j + 1;
+  }
+  return parts.join(", ");
+}
+
 /** One line per rule, in plain words, for list pages and audit logs. */
-export function describeKlymbFilter(f: KlymbFilter): string[] {
+export function describeKlymbFilter(f: KlymbFilter, names: Record<string, string> = {}): string[] {
   const out: string[] = [];
-  out.push(`Anyone who is: ${f.sources.map(describeSource).join(", OR ")}`);
-  for (const s of f.exclude) out.push(`Except: ${describeSource(s)}`);
+  const src = (s: KlymbSource) => describeSource(s, names);
+  out.push(`Anyone who is: ${f.sources.map(src).join(", OR ")}`);
+  for (const s of f.exclude) out.push(`Except: ${src(s)}`);
   if (f.userTypes.length > 0) out.push(`Only: ${f.userTypes.map((t) => USER_TYPE_LABELS[t]).join(", ")}`);
   if (f.colleges.include.length) out.push(`College contains: ${f.colleges.include.join(", ")}`);
   if (f.colleges.exclude.length) out.push(`College does not contain: ${f.colleges.exclude.join(", ")}`);
   if (f.companies.include.length) out.push(`Company contains: ${f.companies.include.join(", ")}`);
   if (f.companies.exclude.length) out.push(`Company does not contain: ${f.companies.exclude.join(", ")}`);
   if (f.cities.length) out.push(`City / state contains: ${f.cities.join(", ")}`);
-  if (f.graduationYears.length) out.push(`Graduation year: ${f.graduationYears.join(", ")}`);
+  if (f.graduationYears.length) out.push(`Graduation year: ${formatYears(f.graduationYears)}`);
   if (f.signedUpFrom || f.signedUpTo) {
     out.push(`Signed up ${f.signedUpFrom ? `from ${f.signedUpFrom}` : ""}${f.signedUpFrom && f.signedUpTo ? " " : ""}${f.signedUpTo ? `to ${f.signedUpTo}` : ""}`);
   }
@@ -121,32 +140,54 @@ export function describeKlymbFilter(f: KlymbFilter): string[] {
   return out;
 }
 
-function describeSource(s: KlymbSource): string {
+function describeSource(s: KlymbSource, names: Record<string, string>): string {
   const label = SOURCE_LABELS[s.kind];
+  const which = (ids: string[]) => (ids.length ? `(${ids.map((id) => eventName(id, names)).join(", ")})` : "(any)");
   switch (s.kind) {
     case "hackathon":
       return [
         label,
-        s.eventIds.length ? `(${s.eventIds.join(", ")})` : "(any)",
+        which(s.eventIds),
         s.submitted === "yes" ? "who submitted" : s.submitted === "no" ? "who did NOT submit" : "",
         s.leadersOnly ? "— team leaders only" : "",
       ].filter(Boolean).join(" ");
     case "videothon":
       return [
         label,
-        s.eventIds.length ? `(${s.eventIds.join(", ")})` : "(any)",
+        which(s.eventIds),
         s.employment !== "any" ? `— ${s.employment === "WORKING" ? "working" : "learners"}` : "",
         s.submitted === "yes" ? "who submitted" : s.submitted === "no" ? "who did NOT submit" : "",
       ].filter(Boolean).join(" ");
     case "workshop":
-      return `${label} ${s.eventIds.length ? `(${s.eventIds.join(", ")})` : "(any)"}`;
+      return `${label} ${which(s.eventIds)}`;
     case "cohort":
       return [
         label,
-        s.cohortIds.length ? `(${s.cohortIds.length} selected)` : "(any)",
+        s.cohortIds.every((id) => names[id]) ? which(s.cohortIds) : `(${s.cohortIds.length} selected)`,
         s.statuses.length ? `— ${s.statuses.join("/").toLowerCase()}` : "",
       ].filter(Boolean).join(" ");
     default:
       return label;
   }
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const WORDS: Record<string, string> = { ai: "AI", linkedin: "LinkedIn", ml: "ML", ui: "UI", ux: "UX" };
+
+/**
+ * A readable name for an event id: "workshop-2026-09-05" → "Workshop · 5 Sep 2026",
+ * "linkedin-ai-interview" → "LinkedIn AI Interview".
+ */
+export function prettyEventId(id: string): string {
+  const dated = id.match(/^(.*?)-?(\d{4})-(\d{2})-(\d{2})$/);
+  if (dated) {
+    const [, prefix, y, m, d] = dated;
+    const date = `${Number(d)} ${MONTHS[Number(m) - 1] ?? m} ${y}`;
+    return prefix ? `${prettyEventId(prefix)} · ${date}` : date;
+  }
+  return id
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map((w) => WORDS[w.toLowerCase()] ?? w[0]!.toUpperCase() + w.slice(1))
+    .join(" ");
 }
