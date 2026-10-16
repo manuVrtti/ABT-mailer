@@ -18,8 +18,10 @@ import {
 import { getEmailProvider } from "@/server/email/provider-factory";
 import { brandForAddress, domainOf, listBrands, senderBrand, sendableDefault, type BrandInfo } from "@/server/brands";
 import { ProviderError } from "@/server/email/types";
+import { completeDirectSendIfDone } from "@/server/direct-send/complete";
 import type {
   EnqueueResult,
+  ProviderAttachment,
   ProviderEvent,
   QueueMarketingEmailInput,
   QueueRawTransactionalEmailInput,
@@ -234,6 +236,7 @@ export const EmailService = {
     fromEmail?: string;
     fromName?: string;
     replyTo?: string;
+    attachments?: ProviderAttachment[];
   }) {
     const env = getServerEnv();
     const provider = getEmailProvider();
@@ -249,6 +252,7 @@ export const EmailService = {
       subject: `[TEST] ${input.subject}`,
       html: input.html,
       text: input.text,
+      attachments: input.attachments,
       configurationSet: env.SES_CONFIGURATION_SET,
       tags: { kind: "test" },
     });
@@ -288,6 +292,17 @@ export const EmailService = {
       }
     }
 
+    if (job.directSendId) {
+      const batch = await db.directSend.findUnique({ where: { id: job.directSendId }, select: { status: true } });
+      if (batch?.status === "CANCELLED") {
+        await db.emailJob.update({
+          where: { id: job.id },
+          data: { status: EmailJobStatus.SKIPPED, errorCode: "batch_cancelled" },
+        });
+        return { skipped: true, reason: "batch_cancelled" as const };
+      }
+    }
+
     // The brand this job sends as (from its From address): scopes unsubscribes
     // and complaints, and names the footer / unsubscribe page.
     const brand = await brandForAddress(job.fromEmail);
@@ -313,6 +328,7 @@ export const EmailService = {
           logger.error({ err: e, campaignId: job.campaignId }, "campaign.complete_check.failed"),
         );
       }
+      if (job.directSendId) await completeDirectSendIfDone(job.directSendId).catch(() => {});
       return { skipped: true, reason: suppression.reason };
     }
 
@@ -359,6 +375,7 @@ export const EmailService = {
           brand,
         });
       }
+      const attachments = await loadJobAttachments(job.attachmentIds);
       const result = await provider.send({
         to: job.recipientEmail,
         from: { email: job.fromEmail, name: job.fromName },
@@ -368,10 +385,11 @@ export const EmailService = {
         text: job.renderedText ?? undefined,
         configurationSet: env.SES_CONFIGURATION_SET,
         headers: Object.keys(headers).length > 0 ? headers : undefined,
+        attachments,
         tags: {
           jobId: job.id,
           emailType: job.emailType,
-          campaignId: job.campaignId ?? "none",
+          campaignId: job.campaignId ?? job.directSendId ?? "none",
           templateKey: job.templateKey ?? "none",
         },
       });
@@ -412,6 +430,7 @@ export const EmailService = {
           logger.error({ err: e, campaignId: job.campaignId }, "campaign.complete_check.failed"),
         );
       }
+      if (job.directSendId) await completeDirectSendIfDone(job.directSendId).catch(() => {});
       return { skipped: false, providerMessageId: result.providerMessageId };
     } catch (err) {
       const providerErr = err instanceof ProviderError ? err : new ProviderError("transient", (err as Error).message);
@@ -442,6 +461,7 @@ export const EmailService = {
           logger.error({ err: e, campaignId: job.campaignId }, "campaign.complete_check.failed"),
         );
       }
+      if (!retryable && job.directSendId) await completeDirectSendIfDone(job.directSendId).catch(() => {});
       // Rethrow so the queue can retry retryable errors.
       throw providerErr;
     }
@@ -531,6 +551,17 @@ async function resolveSender(
   const brand = sendableDefault(brands);
   const fromEmail = brand.fromAddresses[0] ?? getServerEnv().SES_FROM_EMAIL;
   return { brand, fromEmail, fromName: overrides?.fromName ?? brand.fromName, replyTo: overrides?.replyTo ?? brand.replyTo };
+}
+
+/** Files for a personal-mails job. A file deleted since launch fails the job permanently. */
+async function loadJobAttachments(ids: string[]): Promise<ProviderAttachment[] | undefined> {
+  if (ids.length === 0) return undefined;
+  const rows = await db.mailAttachment.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, filename: true, contentType: true, data: true },
+  });
+  if (rows.length !== new Set(ids).size) throw new ProviderError("permanent", "attachment no longer exists");
+  return rows.map((r) => ({ filename: r.filename, contentType: r.contentType, content: new Uint8Array(r.data) }));
 }
 
 const RAW_HEADERS_KEY = "__headers";
