@@ -18,6 +18,7 @@ import {
   LogOut,
   Activity,
   ChevronDown,
+  Send,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Role } from "@prisma/client";
@@ -48,6 +49,7 @@ const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", group: "top", icon: LayoutDashboard },
 
   { href: "/marketing/campaigns", label: "Campaigns", group: "marketing", icon: Megaphone, badgeKey: "campaignsSending" },
+  { href: "/marketing/personal", label: "Personal mails", group: "marketing", icon: Send },
   { href: "/marketing/contacts", label: "Contacts", group: "marketing", icon: Users, badgeKey: "contacts" },
   { href: "/marketing/segments", label: "Segments", group: "marketing", icon: Filter, badgeKey: "segments" },
   { href: "/marketing/templates", label: "Templates", group: "marketing", icon: Palette, badgeKey: "templates" },

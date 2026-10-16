@@ -48,6 +48,15 @@ export class SESProvider implements EmailProvider {
           Headers: payload.headers
             ? Object.entries(payload.headers).map(([Name, Value]) => ({ Name, Value }))
             : undefined,
+          Attachments: payload.attachments?.length
+            ? payload.attachments.map((a) => ({
+                RawContent: a.content,
+                FileName: sanitizeFileName(a.filename),
+                ContentType: a.contentType,
+                ContentDisposition: "ATTACHMENT" as const,
+                ContentTransferEncoding: "BASE64" as const,
+              }))
+            : undefined,
         },
       },
     });
@@ -73,6 +82,11 @@ export class SESProvider implements EmailProvider {
 /** SES tag chars: A-Z a-z 0-9 - _ · max 256 chars each. Strip anything else. */
 function sanitizeTag(s: string): string {
   return s.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 256);
+}
+
+/** Attachment file names go into MIME headers: no control chars, quotes or slashes. */
+function sanitizeFileName(s: string): string {
+  return s.replace(/[\u0000-\u001f"\\/]/g, "_").slice(0, 200) || "attachment";
 }
 
 /** From-name: strip newlines and control chars to prevent header injection. */

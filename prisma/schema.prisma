@@ -134,6 +134,25 @@ enum ListOverrideMode {
   @@map("list_override_mode")
 }
 
+// Personal mails: one CSV row = one hand-written email to one address.
+enum DirectSendStatus {
+  DRAFT
+  SENDING
+  COMPLETED
+  CANCELLED
+
+  @@map("direct_send_status")
+}
+
+// PERSONAL is one-to-one mail (no unsubscribe footer, transactional category);
+// MARKETING adds the unsubscribe footer + header and honours marketing opt-outs.
+enum DirectSendKind {
+  PERSONAL
+  MARKETING
+
+  @@map("direct_send_kind")
+}
+
 enum ImportJobStatus {
   PENDING
   PARSING
@@ -502,6 +521,9 @@ model EmailJob {
 
   // Template routing
   campaignId      String?        @map("campaign_id")
+  // Personal mails batch this job came from, and the files sent with it.
+  directSendId    String?        @map("direct_send_id")
+  attachmentIds   String[]       @default([]) @map("attachment_ids")
   templateKey     String?        @map("template_key")       // for transactional
   templateVersion Int?           @map("template_version")   // for transactional
   emailTemplateId String?        @map("email_template_id")  // for marketing
@@ -541,6 +563,7 @@ model EmailJob {
   @@index([emailType, status])
   @@index([status, scheduledFor])
   @@index([campaignId])
+  @@index([directSendId])
   @@index([recipientEmail])
   @@index([providerMessageId])
   @@map("email_jobs")
@@ -646,6 +669,72 @@ model UnsubscribeToken {
 
   @@index([email])
   @@map("unsubscribe_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Personal mails — a CSV of (email, subject, body, attachments) sent one by one
+// ---------------------------------------------------------------------------
+
+model DirectSend {
+  id          String           @id @default(cuid())
+  name        String
+  status      DirectSendStatus @default(DRAFT)
+  kind        DirectSendKind   @default(PERSONAL)
+  fromName    String           @map("from_name")
+  fromEmail   String           @map("from_email")
+  replyTo     String?          @map("reply_to")
+  totalRows   Int              @default(0) @map("total_rows")
+  createdById String?          @map("created_by_id")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  startedAt   DateTime?        @map("started_at")
+  completedAt DateTime?        @map("completed_at")
+
+  rows        DirectSendRow[]
+  attachments MailAttachment[]
+
+  @@index([createdAt])
+  @@map("direct_sends")
+}
+
+model DirectSendRow {
+  id              String   @id @default(cuid())
+  directSendId    String   @map("direct_send_id")
+  rowNumber       Int      @map("row_number") // 1-based, as in the CSV
+  email           String
+  name            String?
+  subject         String
+  body            String   @db.Text // as written in the CSV (plain text or HTML)
+  // Every CSV column, for {{column}} personalization.
+  variables       Json
+  // File names from the CSV's attachment column.
+  attachmentNames String[] @default([]) @map("attachment_names")
+  emailJobId      String?  @unique @map("email_job_id")
+
+  directSend DirectSend @relation(fields: [directSendId], references: [id], onDelete: Cascade)
+
+  @@unique([directSendId, rowNumber])
+  @@index([directSendId])
+  @@map("direct_send_rows")
+}
+
+// Files uploaded for a personal-mails batch. Stored in the database so the
+// delivery worker can attach them; deleted with the batch.
+model MailAttachment {
+  id           String   @id @default(cuid())
+  directSendId String   @map("direct_send_id")
+  filename     String
+  contentType  String   @map("content_type")
+  size         Int
+  // Attached to every email in the batch, not only rows that name it.
+  forAll       Boolean  @default(false) @map("for_all")
+  data         Bytes
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  directSend DirectSend @relation(fields: [directSendId], references: [id], onDelete: Cascade)
+
+  @@unique([directSendId, filename])
+  @@map("mail_attachments")
 }
 
 // ---------------------------------------------------------------------------

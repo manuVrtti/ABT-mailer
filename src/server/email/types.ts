@@ -20,6 +20,14 @@ export interface ProviderSendPayload {
    * events can be joined back without depending on the SES-assigned id alone.
    */
   tags?: Record<string, string>;
+  /** Files sent as real attachments (personal mails). */
+  attachments?: ProviderAttachment[];
+}
+
+export interface ProviderAttachment {
+  filename: string;
+  contentType: string;
+  content: Uint8Array;
 }
 
 export interface ProviderSendResult {
