@@ -13,7 +13,7 @@ import { checkSuppressionBulk } from "@/server/email/suppression";
 import { sanitizeHtml } from "@/server/email/render";
 import { unsubscribeUrl } from "@/server/unsubscribe/token";
 import { enqueueDeliveries } from "@/server/queue/publish";
-import { buildRowEmail, DIRECT_SEND_LIMITS, escapeHtml, formatBytes, type BuiltEmail } from "./body";
+import { buildRowEmail, DIRECT_SEND_LIMITS, escapeHtml, findFiles, formatBytes, type BuiltEmail } from "./body";
 import { completeDirectSendIfDone } from "./complete";
 
 const CHUNK = 500;
@@ -51,14 +51,13 @@ export function attachmentsForRow<T extends { filename: string; forAll: boolean 
   attachments: T[],
   names: string[],
 ): { files: T[]; missing: string[] } {
-  const byName = new Map(attachments.map((a) => [a.filename.toLowerCase(), a]));
   const files = new Map<string, T>();
   for (const a of attachments) if (a.forAll) files.set(a.filename.toLowerCase(), a);
   const missing: string[] = [];
   for (const n of names) {
-    const a = byName.get(n.toLowerCase());
-    if (a) files.set(a.filename.toLowerCase(), a);
-    else missing.push(n);
+    const found = findFiles(n, attachments, (a) => a.filename);
+    if (found.length === 0) missing.push(n);
+    for (const a of found) files.set(a.filename.toLowerCase(), a);
   }
   return { files: [...files.values()], missing };
 }

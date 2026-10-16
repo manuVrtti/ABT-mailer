@@ -21,6 +21,8 @@ import {
   buildRowEmail,
   checkRows,
   detectColumns,
+  fileMatches,
+  fillVariables,
   DIRECT_SEND_LIMITS,
   formatBytes,
   isBlocking,
@@ -86,12 +88,14 @@ export function NewDirectSendForm({
   const readyRows = rows.filter((r) => !isBlocking(issues.get(r.rowNumber)));
   const warnRows = rows.filter((r) => issues.has(r.rowNumber) && !isBlocking(issues.get(r.rowNumber)));
   const missingColumns = REQUIRED.filter((r) => !map[r]);
+  // Names used in the CSV's attachment column → how many rows use each.
   const referenced = useMemo(() => {
     const m = new Map<string, number>();
-    for (const r of rows) for (const n of r.attachmentNames) m.set(n.toLowerCase(), (m.get(n.toLowerCase()) ?? 0) + 1);
+    for (const r of rows) for (const n of r.attachmentNames) m.set(n, (m.get(n) ?? 0) + 1);
     return m;
   }, [rows]);
-  const notUploaded = [...referenced.keys()].filter((n) => !fileNames.some((f) => f.toLowerCase() === n));
+  const usesOf = (fileName: string) => rows.filter((r) => r.attachmentNames.some((n) => fileMatches(n, fileName))).length;
+  const notUploaded = [...referenced.keys()].filter((n) => !fileNames.some((f) => fileMatches(n, f)));
 
   const shown = (onlyProblems ? rows.filter((r) => issues.has(r.rowNumber)) : rows).slice(0, 200);
   const current = rows.find((r) => r.rowNumber === previewRow) ?? rows[0];
@@ -297,7 +301,7 @@ export function NewDirectSendForm({
         {(files.length > 0 || notUploaded.length > 0) && (
           <ul className="mt-3 divide-y divide-border rounded-xl border border-border/70">
             {files.map((f) => {
-              const uses = referenced.get(f.file.name.toLowerCase()) ?? 0;
+              const uses = usesOf(f.file.name);
               return (
                 <li key={f.file.name} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
                   <Paperclip className="h-4 w-4 text-muted-foreground" />
@@ -387,7 +391,9 @@ export function NewDirectSendForm({
                           <div className="truncate font-medium">{r.name || r.email || "—"}</div>
                           {r.name && <div className="truncate text-xs text-muted-foreground">{r.email}</div>}
                         </td>
-                        <td className="max-w-[220px] truncate px-3 py-1.5">{r.subject || <span className="text-muted-foreground">—</span>}</td>
+                        <td className="max-w-[220px] truncate px-3 py-1.5">
+                          {r.subject ? fillVariables(r.subject, r.variables, false) : <span className="text-muted-foreground">—</span>}
+                        </td>
                         <td className="px-3 py-1.5 text-xs text-muted-foreground">{r.attachmentNames.length || ""}</td>
                         <td className="px-3 py-1.5">
                           {iss.length === 0 ? (
@@ -468,9 +474,9 @@ export function NewDirectSendForm({
 function RowPreview({ row, files, fromEmail, kind }: { row: DirectRow; files: LocalFile[]; fromEmail: string; kind: Kind }) {
   const email = buildRowEmail(row);
   const rowFiles = files.filter(
-    (f) => f.forAll || row.attachmentNames.some((n) => n.toLowerCase() === f.file.name.toLowerCase()),
+    (f) => f.forAll || row.attachmentNames.some((n) => fileMatches(n, f.file.name)),
   );
-  const missing = row.attachmentNames.filter((n) => !files.some((f) => f.file.name.toLowerCase() === n.toLowerCase()));
+  const missing = row.attachmentNames.filter((n) => !files.some((f) => fileMatches(n, f.file.name)));
   return (
     <div className="overflow-hidden rounded-xl border border-border/70 bg-white dark:bg-slate-900/60">
       <div className="space-y-1 border-b border-border/60 bg-slate-50 px-4 py-3 text-xs dark:bg-slate-800/40">
