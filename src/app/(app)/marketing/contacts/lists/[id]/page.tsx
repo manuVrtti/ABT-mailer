@@ -7,7 +7,6 @@ import { describeKlymbFilter, klymbFilterSchema, USER_TYPES, USER_TYPE_LABELS } 
 import type { KlymbSyncStats } from "@/server/klymb/sync";
 import { KlymbOverridesPanel, RefreshKlymbButton } from "./_klymb-panel";
 import { ContactsTabs } from "../../_tabs";
-import { listColorChip, listColorGradient } from "../_colors";
 import { DeleteListButton } from "./_delete-button";
 import { AddMembersPanel } from "./_add-members";
 import { ImportCsvPanel } from "./_import-csv";
@@ -16,6 +15,18 @@ import { RemoveMemberButton } from "./_remove-member";
 export const dynamic = "force-dynamic";
 // CSV imports and Klymb refreshes run as server actions on this route.
 export const maxDuration = 120;
+
+const ADDED = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
+
+const LIST_DOT: Record<string, string> = {
+  emerald: "bg-emerald-500",
+  teal: "bg-teal-400",
+  sky: "bg-sky-500",
+  amber: "bg-amber-500",
+  rose: "bg-rose-500",
+  violet: "bg-violet-500",
+  slate: "bg-slate-400",
+};
 
 const TYPE_BADGE: Record<string, "success" | "info" | "warning" | "muted"> = {
   STUDENT: "success",
@@ -87,8 +98,6 @@ export default async function ListDetailPage({
   ]);
   if (!list) notFound();
 
-  const grad = listColorGradient(list.color);
-  const chip = listColorChip(list.color);
   const isKlymb = list.kind === ContactListKind.KLYMB;
   const filter = isKlymb ? klymbFilterSchema.safeParse(list.klymbFilter) : null;
   const stats = (list.syncStats ?? null) as KlymbSyncStats | null;
@@ -97,57 +106,48 @@ export default async function ListDetailPage({
     <div className="space-y-6">
       <ContactsTabs />
 
-      {/* Hero card matching the list's color */}
-      <div className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${grad} p-6 text-white shadow-md`}>
-        <div className="absolute -right-8 -top-8 h-40 w-40 rounded-full bg-white/10 blur-3xl" />
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-white/80">
-              {isKlymb ? "Live list · Klymb database" : "Contact list"}
-            </div>
-            <h1 className="mt-1 text-3xl font-semibold">{list.name}</h1>
-            {list.description && <p className="mt-2 max-w-2xl text-sm text-white/90">{list.description}</p>}
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs backdrop-blur">
-                <Users className="h-3.5 w-3.5" />
-                <span className="font-semibold tabular-nums">{list._count.members.toLocaleString()}</span>
-                <span>contacts</span>
-              </span>
-              {isKlymb && (
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs backdrop-blur">
-                  <DatabaseZap className="h-3.5 w-3.5" />
-                  {list.syncedAt ? `Refreshed ${formatAgo(list.syncedAt)}` : "Never refreshed"}
-                </span>
-              )}
-            </div>
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${LIST_DOT[list.color] ?? LIST_DOT.slate}`} aria-hidden />
+            <h1 className="truncate text-[22px] font-semibold leading-8 tracking-tight">{list.name}</h1>
           </div>
-          <div className="flex flex-wrap items-start gap-2">
-            <span className={`rounded-full px-3 py-1 text-[10px] font-medium ${chip}`}>{list.color}</span>
-            {isKlymb && (
-              <>
-                <RefreshKlymbButton listId={list.id} />
-                <Button
-                  as="a"
-                  href={`/marketing/contacts/lists/${list.id}/filter`}
-                  variant="secondary"
-                  className="border-white/40 text-slate-900 dark:text-white"
-                >
-                  <SlidersHorizontal className="mr-1 h-4 w-4" />
-                  Edit filter
-                </Button>
-              </>
+          {list.description && <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{list.description}</p>}
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <Badge tone="muted">
+              <Users className="h-3 w-3" /> {list._count.members.toLocaleString()} contacts
+            </Badge>
+            {isKlymb ? (
+              <Badge tone={list.syncError ? "destructive" : "success"} dot>
+                {list.syncError ? "Refresh failed" : "Live · Klymb database"}
+              </Badge>
+            ) : (
+              <Badge tone="muted">Static list</Badge>
             )}
-            <Button
-              as="a"
-              href={`/marketing/campaigns/new?listId=${list.id}`}
-              variant="secondary"
-              className="border-white/40 text-slate-900 dark:text-white"
-            >
-              <Megaphone className="mr-1 h-4 w-4" />
-              Send campaign
-            </Button>
-            <DeleteListButton id={list.id} name={list.name} />
+            {isKlymb && (
+              <span className="inline-flex items-center gap-1">
+                <DatabaseZap className="h-3.5 w-3.5" />
+                {list.syncedAt ? `Refreshed ${formatAgo(list.syncedAt)}` : "Never refreshed"}
+              </span>
+            )}
           </div>
+        </div>
+        <div className="flex flex-wrap items-start gap-2">
+          {isKlymb && (
+            <>
+              <RefreshKlymbButton listId={list.id} />
+              <Button as="a" href={`/marketing/contacts/lists/${list.id}/filter`} variant="secondary">
+                <SlidersHorizontal className="h-4 w-4" />
+                Edit filter
+              </Button>
+            </>
+          )}
+          <DeleteListButton id={list.id} name={list.name} />
+          <Button as="a" href={`/marketing/campaigns/new?listId=${list.id}`}>
+            <Megaphone className="h-4 w-4" />
+            Send campaign
+          </Button>
         </div>
       </div>
 
@@ -294,7 +294,7 @@ export default async function ListDetailPage({
                       <TD>{m.contact.year ?? "—"}</TD>
                     </>
                   )}
-                  <TD className="text-xs text-muted-foreground">{m.addedAt.toISOString().slice(0, 10)}</TD>
+                  <TD className="whitespace-nowrap text-xs text-muted-foreground">{ADDED.format(m.addedAt)}</TD>
                   <TD className="text-right">
                     <RemoveMemberButton listId={list.id} contactId={m.contactId} />
                   </TD>

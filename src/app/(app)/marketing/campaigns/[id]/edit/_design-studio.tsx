@@ -88,7 +88,7 @@ export function DesignStudio({
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search templates"
                 aria-label="Search templates"
-                className="h-10 w-full rounded-xl border border-border/60 bg-white pl-9 pr-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 dark:bg-slate-900"
+                className="h-10 w-full rounded-lg border border-border bg-card pl-9 pr-3 text-sm outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 dark:bg-slate-900"
               />
             </div>
 

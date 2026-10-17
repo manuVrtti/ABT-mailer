@@ -241,7 +241,7 @@ export function KlymbListForm({
     <div className="grid gap-6 pb-24 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-5">
         {/* Name */}
-        <section className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+        <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex flex-wrap items-end gap-4">
             <div className="min-w-[240px] flex-1">
               <label htmlFor="name" className="mb-1 block text-xs font-medium text-muted-foreground">
@@ -315,7 +315,7 @@ export function KlymbListForm({
                     "rounded-xl border px-3 py-2.5 text-left transition",
                     activePreset === p.label
                       ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40"
-                      : "border-border/70 bg-white hover:border-emerald-300 hover:bg-emerald-50/40 dark:bg-slate-900/60",
+                      : "border-border/70 bg-white hover:border-emerald-300 hover:bg-emerald-50/40",
                   )}
                 >
                   <div className="text-sm font-medium">{p.label}</div>
@@ -522,7 +522,7 @@ function Step({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-start gap-3">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-semibold text-white">
           {n}
@@ -1431,7 +1431,7 @@ function PreviewPanel({
 
   return (
     <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
-      <div className="overflow-hidden rounded-2xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <div className="bg-gradient-to-br from-emerald-500 to-teal-600 p-5 text-white">
           <div className="flex items-center justify-between text-xs font-medium uppercase tracking-wider text-white/80">
             This list reaches
@@ -1501,7 +1501,7 @@ function PreviewPanel({
       </div>
 
       {preview && preview.total > 0 && (
-        <div className="rounded-2xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+        <div className="rounded-lg border border-border bg-card shadow-sm">
           <div className="flex border-b border-border/60 px-2 pt-2">
             {(
               [

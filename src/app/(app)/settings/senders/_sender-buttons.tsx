@@ -78,7 +78,7 @@ export function BrandForm({
   const [pending, start] = useTransition();
   const [res, setRes] = useState<SenderActionResult | null>(null);
   const field =
-    "mt-1 w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900";
+    "mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 
   return (
     <form

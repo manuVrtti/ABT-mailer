@@ -159,7 +159,7 @@ export default async function CampaignsPage({
               }
             />
           ) : (
-            <div className="rounded-xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+            <div className="rounded-lg border border-border bg-card shadow-sm">
               {/* No overflow-hidden here: the row menu has to be able to drop out of the list. */}
               <ul className="divide-y divide-border/60">
                 {campaigns.map((c) => {

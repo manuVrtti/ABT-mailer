@@ -16,7 +16,6 @@ export function RefreshKlymbButton({ listId }: { listId: string }) {
       <Button
         type="button"
         variant="secondary"
-        className="border-white/40 text-slate-900 dark:text-white"
         disabled={pending}
         onClick={() =>
           start(async () => {
@@ -34,7 +33,7 @@ export function RefreshKlymbButton({ listId }: { listId: string }) {
         {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-1 h-4 w-4" />}
         {pending ? "Refreshing from Klymb…" : "Refresh now"}
       </Button>
-      {msg && <span className="text-[11px] text-white/90">{msg}</span>}
+      {msg && <span className="text-[11px] text-muted-foreground">{msg}</span>}
     </div>
   );
 }

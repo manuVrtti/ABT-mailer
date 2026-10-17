@@ -90,7 +90,7 @@ export default async function RealtimePage({ searchParams }: { searchParams: { w
         {tiles.map((t) => {
           const Icon = t.icon;
           return (
-            <div key={t.label} className="rounded-xl border border-border/60 bg-white p-4 shadow-sm dark:bg-slate-900/60">
+            <div key={t.label} className="rounded-lg border border-border bg-card p-4 shadow-sm">
               <div className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${t.surface}`}>
                 <Icon className={`h-5 w-5 ${t.tone}`} />
               </div>
@@ -102,7 +102,7 @@ export default async function RealtimePage({ searchParams }: { searchParams: { w
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+        <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-sm font-medium">Sent per {win.unit}</div>
@@ -125,7 +125,7 @@ export default async function RealtimePage({ searchParams }: { searchParams: { w
           </div>
         </div>
 
-        <div className="rounded-xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+        <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start justify-between gap-3">
             <div>
               <div className="text-sm font-medium">Events per {win.unit}</div>

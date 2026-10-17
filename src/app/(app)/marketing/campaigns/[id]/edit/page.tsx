@@ -236,7 +236,7 @@ function SectionShell({
   return (
     <Link
       href={ctaHref}
-      className="group block rounded-2xl border border-border/60 bg-white p-5 shadow-sm transition hover:border-emerald-300 hover:shadow-md dark:bg-slate-900/60"
+      className="group block rounded-lg border border-border bg-card p-5 shadow-sm transition hover:border-emerald-300 hover:shadow-md"
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -337,7 +337,7 @@ async function SenderSection({
             name="fromEmail"
             defaultValue={options.find((o) => o.value === campaign.fromEmail.toLowerCase())?.value ?? campaign.fromEmail}
             required
-            className="w-full rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900"
+            className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20"
           >
             {options.map((o) => (
               <option key={o.value} value={o.value}>

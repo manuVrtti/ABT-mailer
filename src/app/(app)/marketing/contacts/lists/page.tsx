@@ -2,9 +2,8 @@ import Link from "next/link";
 import { DatabaseZap, ListChecks, Plus, Search, Users } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { PageHeader, Button, EmptyState } from "@/components/ui";
+import { PageHeader, Button, EmptyState, Badge } from "@/components/ui";
 import { ContactsTabs } from "../_tabs";
-import { listColorChip, listColorGradient } from "./_colors";
 import { CONTACT_LIST_COLORS } from "./_constants";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +26,19 @@ const SIZES = {
 } satisfies Record<string, { label: string; where: Prisma.ContactListWhereInput }>;
 type SizeKey = keyof typeof SIZES;
 
+const LIST_DOT: Record<string, string> = {
+  emerald: "bg-emerald-500",
+  teal: "bg-teal-400",
+  sky: "bg-sky-500",
+  amber: "bg-amber-500",
+  rose: "bg-rose-500",
+  violet: "bg-violet-500",
+  slate: "bg-slate-400",
+};
+const UPDATED = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
+
 const control =
-  "rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900";
+  "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 
 export default async function ContactListsPage({
   searchParams,
@@ -159,51 +169,43 @@ export default async function ContactListsPage({
           }
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {lists.map((l) => {
-            const grad = listColorGradient(l.color);
-            const chip = listColorChip(l.color);
-            return (
-              <Link
-                key={l.id}
-                href={`/marketing/contacts/lists/${l.id}`}
-                className="group relative flex flex-col overflow-hidden rounded-2xl border border-border/60 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900/60"
-              >
-                <div className={`relative overflow-hidden bg-gradient-to-br ${grad} p-5 text-white`}>
-                  <div className="absolute -right-4 -top-4 h-24 w-24 rounded-full bg-white/10 blur-2xl transition group-hover:bg-white/20" />
-                  <div className="relative flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-lg font-semibold">{l.name}</div>
-                      {l.description && (
-                        <div className="mt-1 line-clamp-2 text-xs text-white/80">{l.description}</div>
-                      )}
-                    </div>
-                    <div className="grid h-10 w-10 place-items-center rounded-xl bg-white/20" title={l.kind === "KLYMB" ? "Live Klymb list" : undefined}>
-                      {l.kind === "KLYMB" ? <DatabaseZap className="h-5 w-5" /> : <ListChecks className="h-5 w-5" />}
-                    </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {lists.map((l) => (
+            <Link
+              key={l.id}
+              href={`/marketing/contacts/lists/${l.id}`}
+              className="group flex flex-col rounded-lg border border-border bg-card p-4 shadow-card transition hover:border-brand-300 hover:shadow-md"
+            >
+              <div className="flex items-start gap-3">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-border bg-muted/50 text-muted-foreground group-hover:text-brand-600">
+                  {l.kind === "KLYMB" ? <DatabaseZap className="h-4 w-4" /> : <ListChecks className="h-4 w-4" />}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`h-2 w-2 shrink-0 rounded-full ${LIST_DOT[l.color] ?? LIST_DOT.slate}`} aria-hidden />
+                    <span className="truncate font-medium">{l.name}</span>
                   </div>
+                  <p className="mt-0.5 line-clamp-2 min-h-[2rem] text-xs text-muted-foreground">
+                    {l.description || (l.kind === "KLYMB" ? "Live list from the Klymb database." : "No description.")}
+                  </p>
                 </div>
-                <div className="flex items-center justify-between px-4 py-3 text-xs">
-                  <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                    <Users className="h-3.5 w-3.5" />
-                    <span className="font-semibold tabular-nums text-foreground">
-                      {l._count.members.toLocaleString()}
-                    </span>{" "}
-                    contacts
-                  </span>
-                  {l.kind === "KLYMB" ? (
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${l.syncError ? "bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300" : chip}`}>
-                      {l.syncError ? "Live · refresh failed" : "Live · Klymb"}
-                    </span>
-                  ) : (
-                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${chip}`}>
-                      {l.color}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            );
-          })}
+              </div>
+              <div className="mt-3 flex items-center justify-between border-t border-border pt-3 text-xs">
+                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                  <Users className="h-3.5 w-3.5" />
+                  <span className="font-semibold tabular text-foreground">{l._count.members.toLocaleString()}</span>
+                  contacts
+                </span>
+                {l.kind === "KLYMB" ? (
+                  <Badge tone={l.syncError ? "destructive" : "success"} dot>
+                    {l.syncError ? "Refresh failed" : "Live · Klymb"}
+                  </Badge>
+                ) : (
+                  <span className="text-muted-foreground">Updated {UPDATED.format(l.updatedAt)}</span>
+                )}
+              </div>
+            </Link>
+          ))}
         </div>
       )}
     </div>
