@@ -452,6 +452,9 @@ model Campaign {
   htmlSnapshot   String?        @db.Text @map("html_snapshot")
   // Campaign-only design (pasted HTML) used instead of a library template.
   customHtml     String?        @db.Text @map("custom_html")
+  // Optional conversion goal: { kind, ref? } (src/server/conversions/kinds.ts).
+  // Without one, any Klymb action counts as a conversion.
+  conversionGoal Json?          @map("conversion_goal")
   completedAt    DateTime?      @map("completed_at")
   cancelledAt    DateTime?      @map("cancelled_at")
 
@@ -801,6 +804,49 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// Attributed conversions — recomputed from the Klymb database
+// ---------------------------------------------------------------------------
+
+// One row per Klymb action (signup, registration, enrollment, …) credited to
+// the last campaign / personal mail its person received in the 7 days before
+// it. Rebuilt wholesale by each refresh (src/server/conversions/refresh.ts).
+model AttributedConversion {
+  id           String   @id @default(cuid())
+  campaignId   String?  @map("campaign_id")
+  directSendId String?  @map("direct_send_id")
+  emailJobId   String   @map("email_job_id")
+  email        String
+  // SIGNUP | WORKSHOP | HACKATHON | VIDEOTHON | COHORT | JOB | MOCK_INTERVIEW
+  kind         String
+  // Event / cohort / job id the action was about, when there is one.
+  ref          String?
+  label        String
+  actionAt     DateTime @map("action_at")
+  sentAt       DateTime @map("sent_at")
+  // The person clicked a link in the email before acting.
+  clicked      Boolean
+
+  @@index([campaignId])
+  @@index([directSendId])
+  @@index([actionAt])
+  @@map("attributed_conversions")
+}
+
+model ConversionRun {
+  id          String    @id @default(cuid())
+  startedAt   DateTime  @default(now()) @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  windowDays  Int       @map("window_days")
+  sends       Int       @default(0)
+  actions     Int       @default(0)
+  conversions Int       @default(0)
+  error       String?   @db.Text
+
+  @@index([startedAt])
+  @@map("conversion_runs")
 }
 
 // ---------------------------------------------------------------------------

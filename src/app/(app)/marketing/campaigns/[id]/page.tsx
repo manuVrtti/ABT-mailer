@@ -4,7 +4,9 @@ import { db } from "@/lib/db";
 import { PageHeader, Card, Badge } from "@/components/ui";
 import { ActionsPanel } from "./_actions-panel";
 import { RecipientActivitySection, parseActivityFilter } from "./_recipient-activity";
-import { CampaignStatus } from "@prisma/client";
+import { CampaignConversions } from "./_conversions";
+import { requireUser } from "@/lib/auth/session";
+import { CampaignStatus, Role } from "@prisma/client";
 import { campaignAudienceSummary, campaignListIds } from "@/server/campaigns/audience";
 
 export const dynamic = "force-dynamic";
@@ -30,6 +32,7 @@ export default async function CampaignDetailPage({
   params: { id: string };
   searchParams: { activity?: string; q?: string; page?: string };
 }) {
+  const user = await requireUser();
   const campaign = await db.campaign.findUnique({
     where: { id: params.id },
     include: {
@@ -141,6 +144,8 @@ export default async function CampaignDetailPage({
           klymbLists={summary.klymbLists}
         />
       </div>
+
+      {campaign.startedAt && <CampaignConversions campaign={campaign} canEdit={user.role !== Role.VIEWER} />}
 
       {campaign.startedAt && (
         <RecipientActivitySection

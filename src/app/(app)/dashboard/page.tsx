@@ -17,6 +17,7 @@ import { Badge, Button, Card, EmptyState, SectionHeader, StatCard, Table, TD, TH
 import { ActivityChart } from "@/components/activity-chart";
 import { Sparkline } from "@/components/sparkline";
 import { cn } from "@/lib/utils";
+import { conversionTotals } from "@/server/conversions/stats";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard" };
@@ -109,7 +110,7 @@ export default async function DashboardPage() {
   const prevStart = new Date(now - 2 * WINDOW * DAY);
   const weekAgo = new Date(now - 7 * DAY);
 
-  const [period, series, contacts, newContacts, newContactsPrev, contactSeries, lists, klymbLists, suppressed, recentCampaigns, recentPersonal, txn] =
+  const [period, series, contacts, newContacts, newContactsPrev, contactSeries, lists, klymbLists, suppressed, recentCampaigns, recentPersonal, txn, conv] =
     await Promise.all([
       periodStats(curStart, prevStart),
       dailySeries(curStart),
@@ -142,6 +143,7 @@ export default async function DashboardPage() {
         where: { emailType: EmailType.TRANSACTIONAL, directSendId: null, createdAt: { gte: weekAgo } },
         _count: { _all: true },
       }),
+      conversionTotals(WINDOW),
     ]);
 
   const { cur, prev } = period;
@@ -198,7 +200,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Emails sent" value={cur.sent.toLocaleString()} delta={change(cur.sent, prev.sent)} sub="Campaigns + personal mails" />
         <StatCard
           label="Delivery rate"
@@ -224,6 +226,13 @@ export default async function DashboardPage() {
           delta={change(rate(cur.bounced, cur.sent), rate(prev.bounced, prev.sent))}
           invert
           sub={`${cur.bounced.toLocaleString()} bounced`}
+        />
+        <StatCard
+          label="Conversions"
+          value={conv.cur.toLocaleString()}
+          delta={change(conv.cur, conv.prev)}
+          sub="Klymb actions after an email"
+          href="/marketing/analytics/conversions"
         />
       </div>
 

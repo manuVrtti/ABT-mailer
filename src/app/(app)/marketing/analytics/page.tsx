@@ -3,6 +3,7 @@ import { BarChart3, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { CampaignStatus, EmailEventType } from "@prisma/client";
 import { PageHeader, Card, EmptyState, Badge, buttonClasses } from "@/components/ui";
+import { AnalyticsTabs } from "./_tabs";
 import { MetricBar } from "@/components/metric-bar";
 import { LineChart, type LineSeries } from "@/components/line-chart";
 
@@ -100,10 +101,10 @@ export default async function MarketingAnalyticsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Marketing analytics"
-        icon={BarChart3}
-        description="Rates across every marketing send. Individual campaign detail pages show per-campaign numbers."
+        title="Analytics"
+        description="Rates across every marketing send. Individual campaign pages show per-campaign numbers."
       />
+      <AnalyticsTabs active="overview" />
 
       {/* Brevo-style: big hero number + progress-bar grid */}
       <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
