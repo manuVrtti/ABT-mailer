@@ -56,7 +56,7 @@ const IST = new Intl.DateTimeFormat("en-IN", {
   minute: "2-digit",
 });
 const control =
-  "rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900";
+  "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 
 function pick<T extends string>(v: string | undefined, allowed: readonly T[] | Record<T, unknown>, fallback: T): T {
   const keys = (Array.isArray(allowed) ? allowed : Object.keys(allowed)) as readonly string[];

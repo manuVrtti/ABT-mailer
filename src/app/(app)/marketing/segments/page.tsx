@@ -29,9 +29,9 @@ export default async function SegmentsPage() {
             <Link
               key={s.id}
               href={`/marketing/segments/${s.id}`}
-              className="group flex items-center gap-4 rounded-xl border border-border/60 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:bg-slate-900/60"
+              className="group flex items-center gap-4 rounded-lg border border-border bg-card p-4 shadow-sm transition hover:shadow-md"
             >
-              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-gradient-to-br from-emerald-50 to-teal-100 text-emerald-600 dark:from-emerald-950/40 dark:to-teal-950/30 dark:text-emerald-300">
+              <div className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-border bg-muted/50 text-muted-foreground group-hover:text-brand-600">
                 <Users2 className="h-5 w-5" />
               </div>
               <div className="min-w-0 flex-1">

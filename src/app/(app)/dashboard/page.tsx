@@ -1,444 +1,461 @@
 import Link from "next/link";
+import { CampaignStatus, ContactListKind, EmailType, Prisma, Role } from "@prisma/client";
 import {
-  Users,
-  UserCheck,
-  UserPlus,
-  Send,
-  Megaphone,
-  Upload,
-  Filter,
-  Palette,
   ArrowRight,
-  Mail,
+  CheckCircle2,
+  DatabaseZap,
+  FileText,
+  Megaphone,
+  Send,
+  ShieldAlert,
+  Upload,
+  Users,
 } from "lucide-react";
 import { db } from "@/lib/db";
-import { CampaignStatus, EmailJobStatus, EmailType } from "@prisma/client";
 import { requireUser } from "@/lib/auth/session";
-import { Badge } from "@/components/ui";
+import { Badge, Button, Card, EmptyState, SectionHeader, StatCard, Table, TD, TH, THead, TR } from "@/components/ui";
+import { ActivityChart } from "@/components/activity-chart";
 import { Sparkline } from "@/components/sparkline";
-import { MetricBar } from "@/components/metric-bar";
-import { LineChart, type LineSeries } from "@/components/line-chart";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard" };
 
-const statusTone: Record<
-  CampaignStatus,
-  { badge: "muted" | "success" | "warning" | "destructive" | "info"; dot: string }
-> = {
-  DRAFT: { badge: "muted", dot: "bg-slate-400" },
-  SCHEDULED: { badge: "info", dot: "bg-blue-500" },
-  QUEUED: { badge: "info", dot: "bg-blue-500" },
-  SENDING: { badge: "info", dot: "bg-emerald-500 animate-pulse" },
-  PAUSED: { badge: "warning", dot: "bg-amber-500" },
-  COMPLETED: { badge: "success", dot: "bg-emerald-500" },
-  CANCELLED: { badge: "warning", dot: "bg-amber-500" },
-  FAILED: { badge: "destructive", dot: "bg-red-500" },
+const DAY = 86_400_000;
+const WINDOW = 30;
+
+const CAMPAIGN_TONE: Record<CampaignStatus, "muted" | "success" | "warning" | "destructive" | "info"> = {
+  DRAFT: "muted",
+  SCHEDULED: "info",
+  QUEUED: "info",
+  SENDING: "info",
+  PAUSED: "warning",
+  COMPLETED: "success",
+  CANCELLED: "warning",
+  FAILED: "destructive",
 };
 
-async function contactsPerDay30d(): Promise<number[]> {
-  const days = 30;
-  const since = new Date();
-  since.setDate(since.getDate() - (days - 1));
-  since.setHours(0, 0, 0, 0);
-  const rows = await db.marketingContact.findMany({
-    where: { createdAt: { gte: since } },
-    select: { createdAt: true },
-  });
-  const buckets = new Array<number>(days).fill(0);
+type PeriodRow = { cur: boolean; sent: number; delivered: number; opened: number; clicked: number; bounced: number; complained: number };
+
+/**
+ * Campaign + personal-mail engagement for the last 30 days and the 30 before.
+ * Events are counted against the day the email was sent, so a rate never
+ * mixes this period's opens with last period's sends. Automated transactional
+ * mail (OTPs, receipts) is left out — it would distort open rates.
+ */
+async function periodStats(curStart: Date, prevStart: Date) {
+  const rows = await db.$queryRaw<PeriodRow[]>(Prisma.sql`
+    SELECT (j.sent_at >= ${curStart}) AS cur,
+      count(*)::int AS sent,
+      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'DELIVERY'))::int AS delivered,
+      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'OPEN'))::int AS opened,
+      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'CLICK'))::int AS clicked,
+      count(*) FILTER (WHERE j.status = 'BOUNCED' OR EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'BOUNCE'))::int AS bounced,
+      count(*) FILTER (WHERE j.status = 'COMPLAINED' OR EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'COMPLAINT'))::int AS complained
+    FROM email_jobs j
+    WHERE (j.campaign_id IS NOT NULL OR j.direct_send_id IS NOT NULL) AND j.sent_at >= ${prevStart}
+    GROUP BY 1`);
+  const empty: PeriodRow = { cur: true, sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0 };
+  return { cur: rows.find((r) => r.cur) ?? empty, prev: rows.find((r) => !r.cur) ?? { ...empty, cur: false } };
+}
+
+/** Per-day sent / opened / clicked (IST days) for the chart. */
+async function dailySeries(start: Date) {
+  const rows = await db.$queryRaw<{ d: string; sent: number; opened: number; clicked: number }[]>(Prisma.sql`
+    SELECT to_char(j.sent_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS d,
+      count(*)::int AS sent,
+      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'OPEN'))::int AS opened,
+      count(*) FILTER (WHERE EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'CLICK'))::int AS clicked
+    FROM email_jobs j
+    WHERE (j.campaign_id IS NOT NULL OR j.direct_send_id IS NOT NULL) AND j.sent_at >= ${start}
+    GROUP BY 1`);
+  const byDay = new Map(rows.map((r) => [r.d, r]));
+  const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
+  const short = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
+  const labels: string[] = [];
+  const sent: number[] = [];
+  const opened: number[] = [];
+  const clicked: number[] = [];
+  for (let i = WINDOW - 1; i >= 0; i--) {
+    const day = new Date(Date.now() - i * DAY);
+    const r = byDay.get(fmt.format(day));
+    labels.push(short.format(day));
+    sent.push(r?.sent ?? 0);
+    opened.push(r?.opened ?? 0);
+    clicked.push(r?.clicked ?? 0);
+  }
+  return { labels, sent, opened, clicked };
+}
+
+async function contactsPerDay(start: Date): Promise<number[]> {
+  const rows = await db.marketingContact.findMany({ where: { createdAt: { gte: start } }, select: { createdAt: true } });
+  const buckets = new Array<number>(WINDOW).fill(0);
   for (const r of rows) {
-    const diff = Math.floor((r.createdAt.getTime() - since.getTime()) / 86_400_000);
-    if (diff >= 0 && diff < days) buckets[diff] = (buckets[diff] ?? 0) + 1;
+    const i = Math.floor((r.createdAt.getTime() - start.getTime()) / DAY);
+    if (i >= 0 && i < WINDOW) buckets[i]!++;
   }
   return buckets;
 }
 
-/** Per-day sent / delivered / opened / clicked over the last 14 days. */
-async function activitySeries14d(): Promise<{
-  sent: number[];
-  delivered: number[];
-  opened: number[];
-  clicked: number[];
-  labels: string[];
-}> {
-  const days = 14;
-  const since = new Date();
-  since.setDate(since.getDate() - (days - 1));
-  since.setHours(0, 0, 0, 0);
-  const sinceMs = since.getTime();
-  const [jobs, events] = await Promise.all([
-    db.emailJob.findMany({
-      where: { createdAt: { gte: since } },
-      select: { sentAt: true },
-    }),
-    db.emailEvent.findMany({
-      where: { createdAt: { gte: since } },
-      select: { createdAt: true, type: true },
-    }),
-  ]);
-  const bucket = () => new Array<number>(days).fill(0);
-  const sent = bucket();
-  const delivered = bucket();
-  const opened = bucket();
-  const clicked = bucket();
-  for (const j of jobs) {
-    if (!j.sentAt) continue;
-    const idx = Math.floor((j.sentAt.getTime() - sinceMs) / 86_400_000);
-    if (idx >= 0 && idx < days) sent[idx] = (sent[idx] ?? 0) + 1;
-  }
-  for (const e of events) {
-    const idx = Math.floor((e.createdAt.getTime() - sinceMs) / 86_400_000);
-    if (idx < 0 || idx >= days) continue;
-    if (e.type === "DELIVERY") delivered[idx] = (delivered[idx] ?? 0) + 1;
-    if (e.type === "OPEN") opened[idx] = (opened[idx] ?? 0) + 1;
-    if (e.type === "CLICK") clicked[idx] = (clicked[idx] ?? 0) + 1;
-  }
-  const labels = Array.from({ length: days }, (_, i) => {
-    const d = new Date(sinceMs + i * 86_400_000);
-    return `${d.getDate()}/${d.getMonth() + 1}`;
-  });
-  return { sent, delivered, opened, clicked, labels };
-}
+const rate = (n: number, of: number) => (of > 0 ? n / of : 0);
+const pct = (n: number, of: number, digits = 1) => (of > 0 ? `${((n / of) * 100).toFixed(digits)}%` : "—");
+/** Relative change between two rates/counts, or null when there's nothing to compare. */
+const change = (cur: number, prev: number) => (prev > 0 ? (cur - prev) / prev : null);
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 86_400_000);
+  const now = Date.now();
+  const curStart = new Date(now - WINDOW * DAY);
+  const prevStart = new Date(now - 2 * WINDOW * DAY);
+  const weekAgo = new Date(now - 7 * DAY);
 
-  const [
-    contactCount,
-    registeredCount,
-    marketingSentAgg,
-    marketingDeliveredAgg,
-    marketingClickedAgg,
-    marketingOpenedAgg,
-    marketingBouncedAgg,
-    recentCampaigns,
-    conversionCount,
-    contactsSeries,
-    newContacts30d,
-    txn7d,
-    txnDelivered7d,
-    txnBounced7d,
-    txnFailed7d,
-    txnOpened7d,
-    activity,
-  ] = await Promise.all([
-    db.marketingContact.count(),
-    db.registeredUserRef.count(),
-    db.emailJob.count({
-      where: { emailType: EmailType.MARKETING, status: { in: [EmailJobStatus.SENT, EmailJobStatus.DELIVERED] } },
-    }),
-    db.campaign.aggregate({ _sum: { deliveredCount: true } }),
-    db.campaign.aggregate({ _sum: { clickedCount: true } }),
-    db.campaign.aggregate({ _sum: { openedCount: true } }),
-    db.campaign.aggregate({ _sum: { bouncedCount: true } }),
-    db.campaign.findMany({
-      orderBy: { updatedAt: "desc" },
-      take: 5,
-      select: {
-        id: true,
-        name: true,
-        status: true,
-        totalRecipients: true,
-        sentCount: true,
-        deliveredCount: true,
-        openedCount: true,
-        clickedCount: true,
-        bouncedCount: true,
-        completedAt: true,
-        startedAt: true,
-      },
-    }),
-    db.conversionEvent.count({ where: { stage: "REGISTRATION" } }),
-    contactsPerDay30d(),
-    db.marketingContact.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-    db.emailJob.count({ where: { emailType: EmailType.TRANSACTIONAL, createdAt: { gte: sevenDaysAgo } } }),
-    db.emailJob.count({
-      where: { emailType: EmailType.TRANSACTIONAL, status: EmailJobStatus.DELIVERED, createdAt: { gte: sevenDaysAgo } },
-    }),
-    db.emailJob.count({
-      where: { emailType: EmailType.TRANSACTIONAL, status: EmailJobStatus.BOUNCED, createdAt: { gte: sevenDaysAgo } },
-    }),
-    db.emailJob.count({
-      where: { emailType: EmailType.TRANSACTIONAL, status: EmailJobStatus.FAILED, createdAt: { gte: sevenDaysAgo } },
-    }),
-    db.emailJob.count({
-      where: { emailType: EmailType.TRANSACTIONAL, sentAt: { gte: sevenDaysAgo } },
-    }),
-    activitySeries14d(),
-  ]);
+  const [period, series, contacts, newContacts, newContactsPrev, contactSeries, lists, klymbLists, suppressed, recentCampaigns, recentPersonal, txn] =
+    await Promise.all([
+      periodStats(curStart, prevStart),
+      dailySeries(curStart),
+      db.marketingContact.count(),
+      db.marketingContact.count({ where: { createdAt: { gte: curStart } } }),
+      db.marketingContact.count({ where: { createdAt: { gte: prevStart, lt: curStart } } }),
+      contactsPerDay(curStart),
+      db.contactList.count(),
+      db.contactList.count({ where: { kind: ContactListKind.KLYMB } }),
+      db.suppression.count(),
+      db.campaign.findMany({
+        orderBy: { updatedAt: "desc" },
+        take: 6,
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          totalRecipients: true,
+          deliveredCount: true,
+          openedCount: true,
+          clickedCount: true,
+          startedAt: true,
+          completedAt: true,
+          scheduledAt: true,
+        },
+      }),
+      db.directSend.findMany({ orderBy: { createdAt: "desc" }, take: 3, select: { id: true, name: true, status: true, totalRows: true, createdAt: true } }),
+      db.emailJob.groupBy({
+        by: ["status"],
+        where: { emailType: EmailType.TRANSACTIONAL, directSendId: null, createdAt: { gte: weekAgo } },
+        _count: { _all: true },
+      }),
+    ]);
 
-  const delivered = marketingDeliveredAgg._sum.deliveredCount ?? 0;
-  const opened = marketingOpenedAgg._sum.openedCount ?? 0;
-  const clicked = marketingClickedAgg._sum.clickedCount ?? 0;
-  const bounced = marketingBouncedAgg._sum.bouncedCount ?? 0;
-  const deliveryRate = marketingSentAgg > 0 ? (delivered / marketingSentAgg) * 100 : 0;
-  const openRate = delivered > 0 ? (opened / delivered) * 100 : 0;
-  const clickRate = delivered > 0 ? (clicked / delivered) * 100 : 0;
-  const bounceRate = marketingSentAgg > 0 ? (bounced / marketingSentAgg) * 100 : 0;
+  const { cur, prev } = period;
+  const txnCount = (s: string[]) => txn.filter((t) => s.includes(t.status)).reduce((n, t) => n + t._count._all, 0);
+  const txnTotal = txnCount(["PENDING", "QUEUED", "SENDING", "SENT", "DELIVERED", "BOUNCED", "COMPLAINED", "FAILED", "SKIPPED"]);
+  const txnDelivered = txnCount(["DELIVERED"]);
+  const txnBounced = txnCount(["BOUNCED"]);
+  const txnFailed = txnCount(["FAILED"]);
 
-  const txnDeliveredPct = txn7d > 0 ? (txnDelivered7d / txn7d) * 100 : 0;
-  const txnBouncedPct = txn7d > 0 ? (txnBounced7d / txn7d) * 100 : 0;
-  const txnFailedPct = txn7d > 0 ? (txnFailed7d / txn7d) * 100 : 0;
-  const txnOpenedPct = txnDelivered7d > 0 ? (txnOpened7d / txnDelivered7d) * 100 : 0;
+  const bounceRate = rate(cur.bounced, cur.sent);
+  const complaintRate = rate(cur.complained, cur.sent);
+  const health = [
+    {
+      label: "Bounce rate",
+      value: pct(cur.bounced, cur.sent, 2),
+      state: bounceRate < 0.02 ? "good" : bounceRate < 0.05 ? "warn" : "bad",
+      hint: "Keep under 2%",
+    },
+    {
+      label: "Spam complaints",
+      value: pct(cur.complained, cur.sent, 2),
+      state: complaintRate < 0.001 ? "good" : complaintRate < 0.003 ? "warn" : "bad",
+      hint: "Keep under 0.1%",
+    },
+    { label: "Suppressed addresses", value: suppressed.toLocaleString(), state: "info", hint: "Never emailed again" },
+  ] as const;
 
   const firstName = (user.name ?? user.email ?? "there").split(/\s+|@/)[0] ?? "there";
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
-
-  const stats = [
-    { label: "Total contacts", value: contactCount, icon: Users, gradient: "from-emerald-500 to-teal-500", surface: "bg-emerald-50 dark:bg-emerald-950/30", accent: "text-emerald-600 dark:text-emerald-300" },
-    { label: "Registered users", value: registeredCount, icon: UserCheck, gradient: "from-sky-500 to-cyan-500", surface: "bg-sky-50 dark:bg-sky-950/30", accent: "text-sky-600 dark:text-sky-300" },
-    { label: "Prospects", value: Math.max(0, contactCount - registeredCount), icon: UserPlus, gradient: "from-amber-500 to-orange-500", surface: "bg-amber-50 dark:bg-amber-950/30", accent: "text-amber-600 dark:text-amber-300" },
-    { label: "Emails sent", value: marketingSentAgg, icon: Send, gradient: "from-rose-500 to-pink-500", surface: "bg-rose-50 dark:bg-rose-950/30", accent: "text-rose-600 dark:text-rose-300" },
-  ];
-
-  const quickActions = [
-    { href: "/marketing/campaigns/new", title: "Create a campaign", desc: "Pick audience, template, send.", icon: Megaphone, surface: "bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30", accent: "text-emerald-700 dark:text-emerald-300" },
-    { href: "/marketing/contacts/import", title: "Import contacts", desc: "Upload a CSV of students.", icon: Upload, surface: "bg-gradient-to-br from-sky-50 to-cyan-100 dark:from-sky-950/40 dark:to-cyan-950/30", accent: "text-sky-700 dark:text-sky-300" },
-    { href: "/marketing/segments/new", title: "Build a segment", desc: "Slice by college, year, branch.", icon: Filter, surface: "bg-gradient-to-br from-amber-50 to-orange-100 dark:from-amber-950/40 dark:to-orange-950/30", accent: "text-amber-700 dark:text-amber-300" },
-    { href: "/marketing/templates/new", title: "Design a template", desc: "Paste HTML or use the editor.", icon: Palette, surface: "bg-gradient-to-br from-rose-50 to-pink-100 dark:from-rose-950/40 dark:to-pink-950/30", accent: "text-rose-700 dark:text-rose-300" },
-  ];
-
-  const linesSeries: LineSeries[] = [
-    { label: "Sent", color: "#10b981", data: activity.sent },
-    { label: "Delivered", color: "#14b8a6", data: activity.delivered },
-    { label: "Opened", color: "#f59e0b", data: activity.opened },
-    { label: "Clicked", color: "#f43f5e", data: activity.clicked },
-  ];
+  const hour = Number(new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }).format(new Date()));
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const canCreate = user.role !== Role.VIEWER;
+  const shortDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
 
   return (
-    <div className="space-y-8">
-      {/* Greeting */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className="text-[22px] font-semibold leading-8 tracking-tight">
             {greeting}, {firstName}
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Here&apos;s what&apos;s happening across your marketing and transactional email.
-          </p>
+          <p className="mt-0.5 text-sm text-muted-foreground">Here&apos;s how your email performed over the last 30 days.</p>
         </div>
-        <Link
-          href="/marketing/campaigns/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:shadow-md"
-        >
-          <Megaphone className="h-4 w-4" />
-          New campaign
-        </Link>
+        {canCreate && (
+          <div className="flex gap-2">
+            <Button as="a" href="/marketing/personal/new" variant="secondary">
+              <Send className="h-4 w-4" /> Personal mails
+            </Button>
+            <Button as="a" href="/marketing/campaigns/new">
+              <Megaphone className="h-4 w-4" /> New campaign
+            </Button>
+          </div>
+        )}
       </div>
 
-      {/* Big stat tiles */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {stats.map((s) => {
-          const Icon = s.icon;
-          return (
-            <div key={s.label} className="group relative overflow-hidden rounded-2xl border border-border/60 bg-white p-5 shadow-sm transition hover:shadow-md dark:bg-slate-900/60">
-              <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${s.gradient} opacity-10 blur-xl transition group-hover:opacity-20`} />
-              <div className="relative">
-                <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl ${s.surface}`}>
-                  <Icon className={`h-5 w-5 ${s.accent}`} />
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <StatCard label="Emails sent" value={cur.sent.toLocaleString()} delta={change(cur.sent, prev.sent)} sub="Campaigns + personal mails" />
+        <StatCard
+          label="Delivery rate"
+          value={pct(cur.delivered, cur.sent)}
+          delta={change(rate(cur.delivered, cur.sent), rate(prev.delivered, prev.sent))}
+          sub={`${cur.delivered.toLocaleString()} delivered`}
+        />
+        <StatCard
+          label="Open rate"
+          value={pct(cur.opened, cur.delivered)}
+          delta={change(rate(cur.opened, cur.delivered), rate(prev.opened, prev.delivered))}
+          sub={`${cur.opened.toLocaleString()} opened`}
+        />
+        <StatCard
+          label="Click rate"
+          value={pct(cur.clicked, cur.delivered, 2)}
+          delta={change(rate(cur.clicked, cur.delivered), rate(prev.clicked, prev.delivered))}
+          sub={`${cur.clicked.toLocaleString()} clicked`}
+        />
+        <StatCard
+          label="Bounce rate"
+          value={pct(cur.bounced, cur.sent, 2)}
+          delta={change(rate(cur.bounced, cur.sent), rate(prev.bounced, prev.sent))}
+          invert
+          sub={`${cur.bounced.toLocaleString()} bounced`}
+        />
+      </div>
+
+      {/* Chart + side cards */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <Card className="xl:col-span-2">
+          <SectionHeader
+            title="Email activity"
+            description="Emails sent per day, with opens and clicks · last 30 days (IST)"
+            actions={
+              <Link href="/marketing/analytics" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">
+                Analytics <ArrowRight className="h-3 w-3" />
+              </Link>
+            }
+          />
+          {cur.sent === 0 ? (
+            <div className="grid h-56 place-items-center text-sm text-muted-foreground">No campaign or personal mail sent in the last 30 days.</div>
+          ) : (
+            <ActivityChart labels={series.labels} sent={series.sent} opened={series.opened} clicked={series.clicked} height={330} />
+          )}
+        </Card>
+
+        <div className="space-y-4">
+          <Card>
+            <SectionHeader title="Sending health" description="Last 30 days" />
+            <ul className="space-y-3">
+              {health.map((h) => (
+                <li key={h.label} className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    {h.state === "good" ? (
+                      <CheckCircle2 className="h-4 w-4 text-brand-600" />
+                    ) : h.state === "info" ? (
+                      <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+                    ) : (
+                      <ShieldAlert className={cn("h-4 w-4", h.state === "warn" ? "text-amber-500" : "text-red-600")} />
+                    )}
+                    <div>
+                      <div className="text-sm">{h.label}</div>
+                      <div className="text-2xs text-muted-foreground">{h.hint}</div>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "text-sm font-semibold tabular",
+                      h.state === "warn" && "text-amber-600",
+                      h.state === "bad" && "text-red-600",
+                    )}
+                  >
+                    {h.value}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+
+          <Card>
+            <SectionHeader
+              title="Audience"
+              actions={
+                <Link href="/marketing/contacts" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">
+                  Contacts <ArrowRight className="h-3 w-3" />
+                </Link>
+              }
+            />
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <div className="text-2xl font-semibold tracking-tight tabular">{contacts.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground">
+                  contacts · <span className="text-foreground">+{newContacts.toLocaleString()}</span> in 30 days
+                  {newContactsPrev > 0 && (
+                    <span className={cn("ml-1", newContacts >= newContactsPrev ? "text-brand-700 dark:text-brand-300" : "text-red-600")}>
+                      ({newContacts >= newContactsPrev ? "▲" : "▼"} {Math.abs(Math.round(((newContacts - newContactsPrev) / newContactsPrev) * 100))}%)
+                    </span>
+                  )}
                 </div>
-                <div className="mt-4 text-3xl font-semibold tracking-tight tabular-nums">{s.value.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground">{s.label}</div>
               </div>
+              <Sparkline data={contactSeries} width={120} height={36} />
             </div>
-          );
-        })}
-      </div>
-
-      {/* HERO: total marketing sent + progress bars + line chart */}
-      <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm dark:bg-slate-900/60">
-        <div className="flex flex-wrap items-start justify-between gap-6">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Marketing activity</div>
-            <div className="mt-1 flex items-baseline gap-3">
-              <div className="text-5xl font-semibold tabular-nums">{marketingSentAgg.toLocaleString()}</div>
-              <div className="text-sm text-muted-foreground">emails sent · last 14 days</div>
-            </div>
-          </div>
-          <Link
-            href="/marketing/analytics"
-            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300"
-          >
-            Explain these metrics <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-x-8 gap-y-5 md:grid-cols-2 lg:grid-cols-4">
-          <MetricBar label="Delivery rate" value={`${deliveryRate.toFixed(2)}%`} percent={deliveryRate} tone="emerald" />
-          <MetricBar label="Open rate" value={`${openRate.toFixed(2)}%`} percent={openRate} tone="teal" />
-          <MetricBar label="Click rate" value={`${clickRate.toFixed(2)}%`} percent={clickRate} tone="amber" />
-          <MetricBar label="Bounce rate" value={`${bounceRate.toFixed(2)}%`} percent={bounceRate} tone="red" />
-        </div>
-
-        <div className="mt-8">
-          <LineChart series={linesSeries} height={200} xLabels={activity.labels} />
-        </div>
-      </div>
-
-      {/* Contacts trend + Transactional activity */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm dark:bg-slate-900/60">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">New contacts</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums">{newContacts30d.toLocaleString()}</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">Over the last 30 days</div>
-            </div>
-            <Sparkline data={contactsSeries} width={200} height={60} />
-          </div>
-          <Link
-            href="/marketing/contacts"
-            className="mt-4 inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300"
-          >
-            Go to contacts <ArrowRight className="h-3 w-3" />
-          </Link>
-        </div>
-
-        <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm dark:bg-slate-900/60">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Transactional activity</div>
-              <div className="mt-1 text-3xl font-semibold tabular-nums">{txn7d.toLocaleString()}</div>
-              <div className="mt-0.5 text-[11px] text-muted-foreground">Emails triggered in last 7 days</div>
-            </div>
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300">
-              <Mail className="h-5 w-5" />
-            </div>
-          </div>
-          <div className="mt-5 space-y-4">
-            <MetricBar label="Delivered" value={`${txnDeliveredPct.toFixed(1)}%`} percent={txnDeliveredPct} tone="emerald" />
-            <MetricBar label="Opens" value={`${txnOpenedPct.toFixed(1)}%`} percent={txnOpenedPct} tone="teal" />
-            <MetricBar label="Hard bounced" value={`${txnBouncedPct.toFixed(1)}%`} percent={txnBouncedPct} tone="rose" />
-            <MetricBar label="Failed" value={`${txnFailedPct.toFixed(1)}%`} percent={txnFailedPct} tone="amber" />
-          </div>
-        </div>
-      </div>
-
-      {/* Recent campaigns + Quick actions */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <div className="mb-3 flex items-end justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Your last campaigns</h2>
-              <p className="text-xs text-muted-foreground">Open, click, and conversion rates for your latest sends.</p>
-            </div>
-            <Link href="/marketing/campaigns" className="text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300">
-              Go to campaigns →
-            </Link>
-          </div>
-          {recentCampaigns.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/70 bg-white p-10 text-center shadow-sm dark:bg-slate-900/40">
-              <div className="mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-50 to-teal-100 dark:from-emerald-950/40 dark:to-teal-950/30">
-                <Megaphone className="h-7 w-7 text-emerald-500 dark:text-emerald-300" />
-              </div>
-              <div className="text-sm font-medium">No campaigns yet</div>
-              <p className="mt-1 max-w-xs text-xs text-muted-foreground">
-                When you launch your first campaign, its progress and analytics will appear here.
-              </p>
-              <Link
-                href="/marketing/campaigns/new"
-                className="mt-4 inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:shadow-md"
-              >
-                Create your first campaign
-                <ArrowRight className="h-3.5 w-3.5" />
+            <div className="mt-4 grid grid-cols-2 gap-2 text-xs">
+              <Link href="/marketing/contacts/lists" className="rounded-md border border-border px-3 py-2 hover:bg-muted">
+                <div className="text-base font-semibold tabular">{lists}</div>
+                <div className="text-muted-foreground">Lists</div>
+              </Link>
+              <Link href="/marketing/contacts/lists" className="rounded-md border border-border px-3 py-2 hover:bg-muted">
+                <div className="flex items-center gap-1 text-base font-semibold tabular">
+                  {klymbLists} <DatabaseZap className="h-3.5 w-3.5 text-brand-600" />
+                </div>
+                <div className="text-muted-foreground">Live Klymb lists</div>
               </Link>
             </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Recent campaigns + right column */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <div className="xl:col-span-2">
+          <SectionHeader
+            title="Recent campaigns"
+            actions={
+              <Link href="/marketing/campaigns" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">
+                All campaigns <ArrowRight className="h-3 w-3" />
+              </Link>
+            }
+          />
+          {recentCampaigns.length === 0 ? (
+            <EmptyState
+              icon={Megaphone}
+              title="No campaigns yet"
+              description="Your campaigns and their results will show up here."
+              action={canCreate ? <Button as="a" href="/marketing/campaigns/new">New campaign</Button> : undefined}
+            />
           ) : (
-            <div className="overflow-hidden rounded-2xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
-              <ul className="divide-y divide-border/60">
+            <Table>
+              <THead>
+                <tr>
+                  <TH>Campaign</TH>
+                  <TH>Status</TH>
+                  <TH className="text-right">Recipients</TH>
+                  <TH className="text-right">Opens</TH>
+                  <TH className="text-right">Clicks</TH>
+                </tr>
+              </THead>
+              <tbody>
                 {recentCampaigns.map((c) => {
-                  const tone = statusTone[c.status];
-                  const openRateC = c.deliveredCount > 0 ? (c.openedCount / c.deliveredCount) * 100 : 0;
-                  const clickRateC = c.deliveredCount > 0 ? (c.clickedCount / c.deliveredCount) * 100 : 0;
-                  const when = c.completedAt ?? c.startedAt;
+                  const when = c.completedAt ?? c.startedAt ?? c.scheduledAt;
                   return (
-                    <li key={c.id}>
-                      <Link
-                        href={`/marketing/campaigns/${c.id}`}
-                        className="grid grid-cols-6 items-center gap-3 px-5 py-4 transition hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                      >
-                        <div className="col-span-6 sm:col-span-3">
-                          <div className="truncate text-sm font-medium">{c.name}</div>
-                          <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-                            <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5">
-                              <span className={`inline-block h-1.5 w-1.5 rounded-full ${tone.dot}`} />
-                              {c.status}
-                            </span>
-                            {when && <span>· Sent {when.toISOString().slice(0, 10)}</span>}
-                            <Badge tone="muted">Email</Badge>
-                          </div>
-                        </div>
-                        <div className="text-center sm:text-right">
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Open rate</div>
-                          <div className="text-base font-semibold tabular-nums">{openRateC.toFixed(2)}%</div>
-                        </div>
-                        <div className="text-center sm:text-right">
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Click rate</div>
-                          <div className="text-base font-semibold tabular-nums">{clickRateC.toFixed(2)}%</div>
-                        </div>
-                        <div className="text-center sm:text-right">
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Recipients</div>
-                          <div className="text-base font-semibold tabular-nums">{c.totalRecipients.toLocaleString()}</div>
-                        </div>
-                      </Link>
-                    </li>
+                    <TR key={c.id}>
+                      <TD className="max-w-[280px]">
+                        <Link href={`/marketing/campaigns/${c.id}`} className="block truncate font-medium hover:underline">
+                          {c.name}
+                        </Link>
+                        <div className="text-xs text-muted-foreground">{when ? shortDate.format(when) : "Not sent"}</div>
+                      </TD>
+                      <TD>
+                        <Badge tone={CAMPAIGN_TONE[c.status]} dot>
+                          {c.status.charAt(0) + c.status.slice(1).toLowerCase()}
+                        </Badge>
+                      </TD>
+                      <TD className="text-right tabular">{c.totalRecipients.toLocaleString()}</TD>
+                      <TD className="text-right tabular">{pct(c.openedCount, c.deliveredCount)}</TD>
+                      <TD className="text-right tabular">{pct(c.clickedCount, c.deliveredCount, 2)}</TD>
+                    </TR>
                   );
                 })}
-              </ul>
-            </div>
+              </tbody>
+            </Table>
           )}
         </div>
 
-        <div>
-          <div className="mb-3 flex items-end justify-between">
-            <div>
-              <h2 className="text-lg font-semibold">Quick actions</h2>
-              <p className="text-xs text-muted-foreground">Jump straight into a task.</p>
-            </div>
-          </div>
-          <div className="space-y-2.5">
-            {quickActions.map((q) => {
-              const Icon = q.icon;
-              return (
-                <Link
-                  key={q.href}
-                  href={q.href}
-                  className={`group flex items-center gap-3 rounded-2xl border border-border/60 p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${q.surface}`}
-                >
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white/70 dark:bg-slate-900/50">
-                    <Icon className={`h-5 w-5 ${q.accent}`} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium">{q.title}</div>
-                    <div className="truncate text-[11px] text-muted-foreground">{q.desc}</div>
-                  </div>
-                  <ArrowRight className={`h-4 w-4 shrink-0 transition group-hover:translate-x-0.5 ${q.accent}`} />
+        <div className="space-y-4">
+          <Card>
+            <SectionHeader
+              title="Transactional"
+              description="Automated emails · last 7 days"
+              actions={
+                <Link href="/transactional/logs" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">
+                  Logs <ArrowRight className="h-3 w-3" />
                 </Link>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+              }
+            />
+            <div className="text-2xl font-semibold tracking-tight tabular">{txnTotal.toLocaleString()}</div>
+            <div className="mb-3 text-xs text-muted-foreground">emails triggered</div>
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <MiniStat label="Delivered" value={pct(txnDelivered, txnTotal)} />
+              <MiniStat label="Bounced" value={pct(txnBounced, txnTotal)} tone={txnBounced ? "bad" : undefined} />
+              <MiniStat label="Failed" value={pct(txnFailed, txnTotal)} tone={txnFailed ? "bad" : undefined} />
+            </div>
+          </Card>
 
-      {/* Registrations attribution row */}
-      <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Registrations from email</div>
-            <div className="mt-1 text-3xl font-semibold tabular-nums">{conversionCount.toLocaleString()}</div>
-            <div className="mt-0.5 text-[11px] text-muted-foreground">Attributed to a marketing campaign via UTM.</div>
-          </div>
-          <Link
-            href="/marketing/analytics"
-            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:underline dark:text-emerald-300"
-          >
-            View analytics <ArrowRight className="h-3 w-3" />
-          </Link>
+          <Card>
+            <SectionHeader
+              title="Personal mails"
+              actions={
+                <Link href="/marketing/personal" className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300">
+                  All <ArrowRight className="h-3 w-3" />
+                </Link>
+              }
+            />
+            {recentPersonal.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No batches yet.</p>
+            ) : (
+              <ul className="-mx-2 space-y-0.5">
+                {recentPersonal.map((p) => (
+                  <li key={p.id}>
+                    <Link href={`/marketing/personal/${p.id}`} className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted">
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm">{p.name}</span>
+                        <span className="text-2xs text-muted-foreground">
+                          {p.totalRows} emails · {shortDate.format(p.createdAt)}
+                        </span>
+                      </span>
+                      <Badge tone={p.status === "COMPLETED" ? "success" : p.status === "SENDING" ? "info" : p.status === "CANCELLED" ? "warning" : "muted"} dot>
+                        {p.status.charAt(0) + p.status.slice(1).toLowerCase()}
+                      </Badge>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+
+          {canCreate && (
+            <Card>
+              <SectionHeader title="Quick actions" />
+              <div className="-mx-2 space-y-0.5">
+                {[
+                  { href: "/marketing/contacts/lists/klymb/new", label: "New Klymb list", icon: DatabaseZap },
+                  { href: "/marketing/contacts/import", label: "Import contacts", icon: Upload },
+                  { href: "/marketing/templates/new", label: "New template", icon: FileText },
+                  { href: "/marketing/segments/new", label: "New segment", icon: Users },
+                ].map((a) => (
+                  <Link key={a.href} href={a.href} className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm hover:bg-muted">
+                    <a.icon className="h-4 w-4 text-muted-foreground group-hover:text-brand-600" />
+                    <span className="flex-1">{a.label}</span>
+                    <ArrowRight className="h-3.5 w-3.5 text-muted-foreground opacity-0 transition group-hover:opacity-100" />
+                  </Link>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "bad" }) {
+  return (
+    <div className="rounded-md bg-muted/60 px-2 py-2">
+      <div className={cn("text-sm font-semibold tabular", tone === "bad" && "text-red-600")}>{value}</div>
+      <div className="text-2xs text-muted-foreground">{label}</div>
     </div>
   );
 }

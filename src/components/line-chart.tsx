@@ -11,8 +11,8 @@ export interface LineSeries {
 
 export function LineChart({
   series,
-  width = 640,
-  height = 220,
+  width = 900,
+  height = 240,
   xLabels,
 }: {
   series: LineSeries[];
@@ -21,7 +21,7 @@ export function LineChart({
   /** Optional labels along the x-axis (must be same length as any series). */
   xLabels?: string[];
 }) {
-  const padX = 32;
+  const padX = 44;
   const padY = 22;
   const innerW = width - padX * 2;
   const innerH = height - padY * 2;
@@ -43,9 +43,9 @@ export function LineChart({
           const val = max - (range / gridSteps) * i;
           return (
             <g key={i}>
-              <line x1={padX} y1={y} x2={width - padX} y2={y} stroke="currentColor" strokeOpacity="0.06" />
-              <text x={padX - 8} y={y + 3} textAnchor="end" className="fill-current text-[9px] opacity-40">
-                {Math.round(val)}
+              <line x1={padX} y1={y} x2={width - padX} y2={y} className="stroke-border" strokeDasharray={i === gridSteps ? undefined : "3 4"} />
+              <text x={padX - 8} y={y} dy="0.32em" textAnchor="end" className="fill-muted-foreground" fontSize="11">
+                {compact(Math.round(val))}
               </text>
             </g>
           );
@@ -61,9 +61,10 @@ export function LineChart({
                 <text
                   key={i}
                   x={x}
-                  y={height - padY + 14}
+                  y={height - padY + 16}
                   textAnchor="middle"
-                  className="fill-current text-[9px] opacity-40"
+                  className="fill-muted-foreground"
+                  fontSize="11"
                 >
                   {label}
                 </text>
@@ -87,15 +88,12 @@ export function LineChart({
             <g key={s.label}>
               <defs>
                 <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={s.color} stopOpacity="0.20" />
+                  <stop offset="0%" stopColor={s.color} stopOpacity={si === 0 ? 0.14 : 0} />
                   <stop offset="100%" stopColor={s.color} stopOpacity="0" />
                 </linearGradient>
               </defs>
               <path d={areaPath} fill={`url(#${gradId})`} />
               <path d={linePath} fill="none" stroke={s.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-              {pts.map(([x, y], i) => (
-                <circle key={i} cx={x} cy={y} r={2.5} fill="white" stroke={s.color} strokeWidth="1.5" />
-              ))}
             </g>
           );
         })}
@@ -112,4 +110,10 @@ export function LineChart({
       </div>
     </div>
   );
+}
+
+function compact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (n >= 1000) return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+  return String(n);
 }

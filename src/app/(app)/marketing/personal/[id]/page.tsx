@@ -241,7 +241,7 @@ export default async function DirectSendPage({
               {matching.toLocaleString()} row{matching === 1 ? "" : "s"}
             </span>
           </div>
-          <div className="overflow-x-auto rounded-xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+          <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
             <table className="w-full text-sm">
               <thead className="bg-slate-50/80 text-[10px] uppercase tracking-wider text-muted-foreground dark:bg-slate-800/40">
                 <tr>
@@ -408,7 +408,7 @@ function Stat({
           ? "text-red-700 dark:text-red-300"
           : "";
   return (
-    <div className="rounded-xl border border-border/60 bg-white p-3 shadow-sm dark:bg-slate-900/60">
+    <div className="rounded-lg border border-border bg-card p-3 shadow-sm">
       <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
         {Icon && <Icon className="h-3.5 w-3.5" />}
         {label}

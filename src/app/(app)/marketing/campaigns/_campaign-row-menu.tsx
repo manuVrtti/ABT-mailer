@@ -61,7 +61,7 @@ export function CampaignRowMenu({
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-9 z-20 w-48 overflow-hidden rounded-xl border border-border/60 bg-white py-1 shadow-lg dark:bg-slate-900"
+          className="absolute right-0 top-9 z-20 w-48 overflow-hidden rounded-lg border border-border bg-card py-1 shadow-lg dark:bg-slate-900"
         >
           {editable && (
             <Link role="menuitem" href={`/marketing/campaigns/${id}/edit`} className={item} onClick={() => setOpen(false)}>

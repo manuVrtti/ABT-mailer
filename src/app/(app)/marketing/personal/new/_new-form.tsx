@@ -478,7 +478,7 @@ function RowPreview({ row, files, fromEmail, kind }: { row: DirectRow; files: Lo
   );
   const missing = row.attachmentNames.filter((n) => !files.some((f) => fileMatches(n, f.file.name)));
   return (
-    <div className="overflow-hidden rounded-xl border border-border/70 bg-white dark:bg-slate-900/60">
+    <div className="overflow-hidden rounded-xl border border-border/70 bg-white">
       <div className="space-y-1 border-b border-border/60 bg-slate-50 px-4 py-3 text-xs dark:bg-slate-800/40">
         <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Preview · row {row.rowNumber}</div>
         <div>
@@ -530,7 +530,7 @@ function Step({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+    <section className="rounded-lg border border-border bg-card p-5 shadow-sm">
       <div className="mb-4 flex items-start gap-3">
         <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-xs font-semibold text-white">
           {n}

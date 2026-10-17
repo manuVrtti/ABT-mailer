@@ -2,7 +2,7 @@ import Link from "next/link";
 import { BarChart3, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { CampaignStatus, EmailEventType } from "@prisma/client";
-import { PageHeader, Card, EmptyState, Badge } from "@/components/ui";
+import { PageHeader, Card, EmptyState, Badge, buttonClasses } from "@/components/ui";
 import { MetricBar } from "@/components/metric-bar";
 import { LineChart, type LineSeries } from "@/components/line-chart";
 
@@ -91,10 +91,10 @@ export default async function MarketingAnalyticsPage() {
   const rate = (num: number, denom: number) => (denom > 0 ? (num / denom) * 100 : 0);
 
   const linesSeries: LineSeries[] = [
-    { label: "Delivered", color: "#14b8a6", data: activity.delivered },
-    { label: "Opened", color: "#f59e0b", data: activity.opened },
-    { label: "Clicked", color: "#f43f5e", data: activity.clicked },
-    { label: "Bounced", color: "#ef4444", data: activity.bounced },
+    { label: "Delivered", color: "#127a5a", data: activity.delivered },
+    { label: "Opened", color: "#46b28b", data: activity.opened },
+    { label: "Clicked", color: "#0ea5e9", data: activity.clicked },
+    { label: "Bounced", color: "#dc2626", data: activity.bounced },
   ];
 
   return (
@@ -106,7 +106,7 @@ export default async function MarketingAnalyticsPage() {
       />
 
       {/* Brevo-style: big hero number + progress-bar grid */}
-      <div className="rounded-2xl border border-border/60 bg-white p-6 shadow-sm dark:bg-slate-900/60">
+      <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div>
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Emails sent (all time)</div>
@@ -180,7 +180,7 @@ export default async function MarketingAnalyticsPage() {
         {campaigns.length === 0 ? (
           <EmptyState icon={BarChart3} title="No sent campaigns yet" description="Launch a campaign to start seeing numbers here." />
         ) : (
-          <div className="overflow-hidden rounded-2xl border border-border/60 bg-white shadow-sm dark:bg-slate-900/60">
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
             <ul className="divide-y divide-border/60">
               {campaigns.map((c) => {
                 const openRate = c.deliveredCount > 0 ? (c.openedCount / c.deliveredCount) * 100 : 0;
@@ -247,7 +247,7 @@ export default async function MarketingAnalyticsPage() {
         </Card>
       </section>
 
-      <div className="rounded-2xl border border-border/60 bg-white p-5 shadow-sm dark:bg-slate-900/60">
+      <div className="rounded-lg border border-border bg-card p-5 shadow-sm">
         <div className="flex items-center justify-between gap-4">
           <div>
             <div className="text-sm font-medium">Want per-campaign breakdown?</div>
@@ -255,7 +255,7 @@ export default async function MarketingAnalyticsPage() {
           </div>
           <Link
             href="/marketing/campaigns"
-            className="inline-flex items-center gap-1 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-xs font-medium text-white shadow-sm hover:shadow-md"
+            className={buttonClasses("primary", "sm")}
           >
             All campaigns <ArrowRight className="h-3.5 w-3.5" />
           </Link>

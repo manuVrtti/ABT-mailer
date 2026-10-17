@@ -10,7 +10,7 @@ export const metadata = { title: "Logs" };
 
 const PAGE_SIZE = 50;
 
-const field = "rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-400 dark:bg-slate-900";
+const field = "h-9 rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none transition-colors focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20";
 
 function qs(f: LogFilters, extra: Record<string, string> = {}): string {
   const p = new URLSearchParams({
