@@ -84,6 +84,22 @@ export function findFiles<T>(csvName: string, files: T[], nameOf: (f: T) => stri
   return files.filter((f) => fileMatches(csvName, nameOf(f)));
 }
 
+const loose = (s: string) => s.trim().toLowerCase().replace(/[\s_.\-]+/g, " ").trim();
+
+/**
+ * Uploaded files named after this person, for when the CSV has no attachment
+ * column: "asha@gmail.com.pdf", "asha.rao.pdf" (part before the @) or
+ * "Asha Rao.pdf" (their name). Case, spaces, dots, dashes and underscores
+ * don't matter. Keys shorter than 3 characters never match.
+ */
+export function matchFilesToPerson(person: { email: string; name: string }, fileNames: string[]): string[] {
+  const keys = new Set(
+    [person.email, person.email.split("@")[0] ?? "", person.name].map(loose).filter((k) => k.length >= 3),
+  );
+  if (keys.size === 0) return [];
+  return fileNames.filter((f) => keys.has(loose(f.replace(EXT_RE, ""))));
+}
+
 /** CSV header → {{variable}} name: "First Name" → "first_name". */
 export function variableKey(header: string): string {
   return header
