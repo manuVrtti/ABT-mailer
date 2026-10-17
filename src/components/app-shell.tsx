@@ -146,6 +146,7 @@ const CRUMB: Record<string, string | null> = {
   segments: "Segments",
   templates: "Templates",
   analytics: "Analytics",
+  conversions: "Conversions",
   realtime: "Real time",
   events: "Events",
   logs: "Logs",

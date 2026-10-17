@@ -9,12 +9,16 @@ export function ActivityChart({
   opened,
   clicked,
   height = 240,
+  legend = ["Sent", "Opened", "Clicked"],
 }: {
   labels: string[];
   sent: number[];
   opened: number[];
+  /** Optional second line; pass [] to hide it. */
   clicked: number[];
   height?: number;
+  /** Names for the bars, first line and second line. */
+  legend?: [string, string, string];
 }) {
   const width = 900;
   const padL = 44;
@@ -46,7 +50,7 @@ export function ActivityChart({
         ))}
         {sent.map((v, i) => (
           <g key={i}>
-            <title>{`${labels[i]}: ${v.toLocaleString()} sent · ${(opened[i] ?? 0).toLocaleString()} opened · ${(clicked[i] ?? 0).toLocaleString()} clicked`}</title>
+            <title>{`${labels[i]}: ${v.toLocaleString()} ${legend[0].toLowerCase()} · ${(opened[i] ?? 0).toLocaleString()} ${legend[1].toLowerCase()}${clicked.length ? ` · ${(clicked[i] ?? 0).toLocaleString()} ${legend[2].toLowerCase()}` : ""}`}</title>
             {/* Full-height hover target */}
             <rect x={x(i) - slot / 2} y={padT} width={slot} height={innerH} className="fill-transparent hover:fill-muted/60" />
             <rect
@@ -60,7 +64,9 @@ export function ActivityChart({
           </g>
         ))}
         <path d={line(opened)} fill="none" className="pointer-events-none stroke-brand-600 dark:stroke-brand-400" strokeWidth={2} strokeLinejoin="round" />
-        <path d={line(clicked)} fill="none" className="pointer-events-none stroke-sky-500" strokeWidth={2} strokeLinejoin="round" />
+        {clicked.length > 0 && (
+          <path d={line(clicked)} fill="none" className="pointer-events-none stroke-sky-500" strokeWidth={2} strokeLinejoin="round" />
+        )}
         {labels.map((l, i) =>
           i % labelEvery === 0 || (i === n - 1 && (n - 1) % labelEvery >= labelEvery / 2) ? (
             <text key={i} x={x(i)} y={height - 6} textAnchor="middle" className="fill-muted-foreground" fontSize="11">
@@ -70,9 +76,9 @@ export function ActivityChart({
         )}
       </svg>
       <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-        <Legend swatch="h-2.5 w-2.5 rounded-sm bg-brand-200 dark:bg-brand-900" label="Sent" />
-        <Legend swatch="h-0.5 w-3 rounded bg-brand-600 dark:bg-brand-400" label="Opened" />
-        <Legend swatch="h-0.5 w-3 rounded bg-sky-500" label="Clicked" />
+        <Legend swatch="h-2.5 w-2.5 rounded-sm bg-brand-200 dark:bg-brand-900" label={legend[0]} />
+        <Legend swatch="h-0.5 w-3 rounded bg-brand-600 dark:bg-brand-400" label={legend[1]} />
+        {clicked.length > 0 && <Legend swatch="h-0.5 w-3 rounded bg-sky-500" label={legend[2]} />}
       </div>
     </div>
   );

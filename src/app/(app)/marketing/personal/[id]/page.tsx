@@ -80,7 +80,7 @@ export default async function DirectSendPage({
     rowWhere = { ...rowWhere, emailJobId: { in: bad.map((b) => b.id) } };
   }
 
-  const [stats, matching, rows, problems, attachmentUse] = await Promise.all([
+  const [stats, matching, rows, problems, attachmentUse, converted] = await Promise.all([
     directSendStats(send.id, send.totalRows),
     db.directSendRow.count({ where: rowWhere }),
     db.directSendRow.findMany({
@@ -92,6 +92,9 @@ export default async function DirectSendPage({
     }),
     isDraft ? checkDirectSendReady(send.id) : Promise.resolve([]),
     db.directSendRow.findMany({ where: { directSendId: send.id }, select: { attachmentNames: true } }),
+    db.attributedConversion
+      .findMany({ where: { directSendId: send.id }, select: { email: true }, distinct: ["email"] })
+      .then((r) => r.length),
   ]);
   const activity = await rowActivity(rows.map((r) => r.emailJobId).filter((x): x is string => Boolean(x)));
 
@@ -191,7 +194,11 @@ export default async function DirectSendPage({
           </div>
           <p className="text-xs text-muted-foreground">
             Opens are counted when the recipient&apos;s email app loads images, so the real open rate is usually a bit higher.
-            Spam complaints: {stats.complained}.
+            Spam complaints: {stats.complained}.{" "}
+            <Link href="/marketing/analytics/conversions" className="text-brand-700 hover:underline dark:text-brand-300">
+              {converted.toLocaleString()} {converted === 1 ? "person" : "people"} acted in Klymb within a week
+            </Link>
+            .
           </p>
         </section>
       )}
