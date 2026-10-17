@@ -4,6 +4,7 @@ import {
   checkRows,
   detectColumns,
   fileMatches,
+  matchFilesToPerson,
   fillVariables,
   htmlToText,
   isBlocking,
@@ -148,6 +149,24 @@ describe("fileMatches", () => {
     const r = attachmentsForRow([{ filename: "klymb_cache_hit_miss.gif", forAll: false }], ["klymb_cache_hit_miss"]);
     expect(r.files.map((f) => f.filename)).toEqual(["klymb_cache_hit_miss.gif"]);
     expect(r.missing).toEqual([]);
+  });
+});
+
+describe("matchFilesToPerson", () => {
+  const files = ["asha@gmail.com.pdf", "Ravi Kumar.pdf", "neha.sharma.docx", "brochure.pdf", "ab.pdf"];
+  it("matches a file named after the email (keeping the .com)", () => {
+    expect(matchFilesToPerson({ email: "asha@gmail.com", name: "" }, files)).toEqual(["asha@gmail.com.pdf"]);
+  });
+  it("matches the name, ignoring case and separators", () => {
+    expect(matchFilesToPerson({ email: "r@x.io", name: "ravi kumar" }, files)).toEqual(["Ravi Kumar.pdf"]);
+    expect(matchFilesToPerson({ email: "r@x.io", name: "Ravi_Kumar" }, files)).toEqual(["Ravi Kumar.pdf"]);
+  });
+  it("matches the part before the @", () => {
+    expect(matchFilesToPerson({ email: "neha.sharma@college.edu", name: "N" }, files)).toEqual(["neha.sharma.docx"]);
+  });
+  it("never matches unrelated or too-short names", () => {
+    expect(matchFilesToPerson({ email: "zz@x.io", name: "Someone" }, files)).toEqual([]);
+    expect(matchFilesToPerson({ email: "ab@x.io", name: "" }, files)).toEqual([]);
   });
 });
 
