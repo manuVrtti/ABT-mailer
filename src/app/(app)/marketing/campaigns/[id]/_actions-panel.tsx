@@ -11,6 +11,7 @@ import {
   resumeCampaign,
 } from "../actions";
 import type { CampaignStatus } from "@prisma/client";
+import { confirmDialog } from "@/components/overlay";
 
 type TypeCounts = Record<"STUDENT" | "PROFESSIONAL" | "RECRUITER" | "UNKNOWN" | "NOT_SET", number>;
 
@@ -225,10 +226,15 @@ export function ActionsPanel({
               type="button"
               variant="destructive"
               disabled={pending}
-              onClick={() => {
-                if (confirm("Cancel this campaign? Recipients not yet sent will be skipped.")) {
-                  start(() => cancelCampaign(id));
-                }
+              onClick={async () => {
+                const ok = await confirmDialog({
+                  title: "Cancel this campaign?",
+                  message: "Recipients who haven't been sent to yet will be skipped. This can't be undone.",
+                  confirmLabel: "Cancel campaign",
+                  cancelLabel: "Keep sending",
+                  tone: "danger",
+                });
+                if (ok) start(() => cancelCampaign(id));
               }}
             >
               Cancel

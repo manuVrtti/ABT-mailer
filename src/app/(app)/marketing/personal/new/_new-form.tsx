@@ -420,7 +420,7 @@ export function NewDirectSendForm({
       )}
 
       {/* Sticky action bar */}
-      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-white/90 backdrop-blur dark:bg-slate-950/90 md:left-72">
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border/60 bg-white/90 backdrop-blur dark:bg-slate-950/90 md:left-[var(--sidebar-w,15rem)]">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-3">
           <div className="text-sm">
             {progress && saving ? (

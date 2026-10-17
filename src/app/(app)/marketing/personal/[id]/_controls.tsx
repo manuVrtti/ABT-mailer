@@ -14,6 +14,7 @@ import {
   setAttachmentForAll,
   uploadDirectSendAttachment,
 } from "../actions";
+import { confirmDialog, toast } from "@/components/overlay";
 
 /** Re-render the server page every few seconds while a batch is sending. */
 export function AutoRefresh({ every = 5000 }: { every?: number }) {
@@ -61,8 +62,13 @@ export function LaunchButton({ id, count, disabled }: { id: string; count: numbe
       <Button
         type="button"
         disabled={pending || disabled}
-        onClick={() => {
-          if (!confirm(`Send ${count.toLocaleString()} personal email${count === 1 ? "" : "s"} now? This can't be undone.`)) return;
+        onClick={async () => {
+          const ok = await confirmDialog({
+            title: `Send ${count.toLocaleString()} personal email${count === 1 ? "" : "s"} now?`,
+            message: "Each person gets their own row's email and files. This can't be undone.",
+            confirmLabel: "Send now",
+          });
+          if (!ok) return;
           start(async () => {
             const r = await launchDirectSendAction(id);
             setMsg(r.ok ? { ok: true, text: r.message } : { ok: false, text: r.error });
@@ -86,10 +92,18 @@ export function CancelButton({ id }: { id: string }) {
       type="button"
       variant="destructive"
       disabled={pending}
-      onClick={() => {
-        if (!confirm("Stop this batch? Emails not yet sent will be skipped.")) return;
+      onClick={async () => {
+        const ok = await confirmDialog({
+          title: "Stop sending this batch?",
+          message: "Emails that haven't gone out yet will be skipped.",
+          confirmLabel: "Stop sending",
+          cancelLabel: "Keep sending",
+          tone: "danger",
+        });
+        if (!ok) return;
         start(async () => {
-          await cancelDirectSendAction(id);
+          const r = await cancelDirectSendAction(id);
+          if (r.ok) toast.success(r.message);
           router.refresh();
         });
       }}
@@ -107,12 +121,20 @@ export function DeleteButton({ id, name }: { id: string; name: string }) {
       type="button"
       variant="secondary"
       disabled={pending}
-      onClick={() => {
-        if (!confirm(`Delete “${name}”? Its rows and attached files are removed. Sent emails stay in Logs.`)) return;
+      onClick={async () => {
+        const ok = await confirmDialog({
+          title: `Delete “${name}”?`,
+          message: "Its rows and attached files are removed. Emails already sent stay in Logs.",
+          confirmLabel: "Delete batch",
+          tone: "danger",
+        });
+        if (!ok) return;
         start(async () => {
           const r = await deleteDirectSend(id);
-          if (r.ok) router.push("/marketing/personal");
-          else alert(r.error);
+          if (r.ok) {
+            toast.success("Batch deleted");
+            router.push("/marketing/personal");
+          } else toast.error("Couldn't delete", r.error);
         });
       }}
     >

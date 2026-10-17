@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
+import { buttonClasses, Input } from "@/components/ui";
 
 export function LoginForm({ callbackUrl, initialError }: { callbackUrl?: string; initialError?: string }) {
   const router = useRouter();
@@ -26,39 +28,44 @@ export function LoginForm({ callbackUrl, initialError }: { callbackUrl?: string;
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-3">
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-muted-foreground">Email</span>
-        <input
+    <form onSubmit={onSubmit} className="flex flex-col gap-4">
+      <div>
+        <label htmlFor="email" className="mb-1.5 block text-sm font-medium">
+          Email
+        </label>
+        <Input
+          id="email"
           type="email"
           required
+          autoFocus
           autoComplete="email"
+          placeholder="you@abtalks.in"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          className="h-10"
         />
-      </label>
-      <label className="flex flex-col gap-1 text-sm">
-        <span className="text-muted-foreground">Password</span>
-        <input
+      </div>
+      <div>
+        <label htmlFor="password" className="mb-1.5 block text-sm font-medium">
+          Password
+        </label>
+        <Input
+          id="password"
           type="password"
           required
           autoComplete="current-password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+          className="h-10"
         />
-      </label>
+      </div>
       {error && (
-        <p className="rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
+        <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300" role="alert">
           {error}
         </p>
       )}
-      <button
-        type="submit"
-        disabled={pending}
-        className="mt-2 inline-flex items-center justify-center rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:shadow-md disabled:opacity-60"
-      >
+      <button type="submit" disabled={pending} className={buttonClasses("primary", "md", "mt-1 h-10 w-full")}>
+        {pending && <Loader2 className="h-4 w-4 animate-spin" />}
         {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>
