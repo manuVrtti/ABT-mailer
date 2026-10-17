@@ -2,36 +2,44 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import {
-  LayoutDashboard,
-  Megaphone,
-  Users,
-  Filter,
-  Palette,
-  BarChart3,
-  Zap,
-  Mail,
-  ScrollText,
-  Settings,
-  LogOut,
   Activity,
-  ChevronDown,
+  BarChart3,
+  Check,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  DatabaseZap,
+  FileText,
+  Filter,
+  LayoutDashboard,
+  ListChecks,
+  LogOut,
+  Mail,
+  Megaphone,
+  Menu,
+  Monitor,
+  Moon,
+  Plus,
+  ScrollText,
+  Search,
   Send,
+  Settings,
+  Sun,
+  Upload,
+  UserCog,
+  Users,
+  X,
+  Zap,
+  type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import type { Role } from "@prisma/client";
-import { TopBar } from "./top-bar";
-
-type NavGroup = "top" | "marketing" | "transactional" | "system";
-type NavItem = {
-  href: string;
-  label: string;
-  group: NavGroup;
-  icon: React.ComponentType<{ className?: string }>;
-  badgeKey?: keyof NavCounts;
-};
+import { cn } from "@/lib/utils";
+import { Avatar, Kbd } from "./ui";
+import { DropdownMenu, applyTheme, readTheme, type ThemeChoice } from "./overlay";
+import { CommandPalette, type PaletteLink } from "./command-palette";
 
 export type NavCounts = {
   campaigns: number;
@@ -45,41 +53,126 @@ export type NavCounts = {
   deliveryLogs: number;
 };
 
-const NAV: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", group: "top", icon: LayoutDashboard },
+type NavItem = { href: string; label: string; icon: LucideIcon; live?: keyof NavCounts };
+type NavSection = { label?: string; items: NavItem[] };
 
-  { href: "/marketing/campaigns", label: "Campaigns", group: "marketing", icon: Megaphone, badgeKey: "campaignsSending" },
-  { href: "/marketing/personal", label: "Personal mails", group: "marketing", icon: Send },
-  { href: "/marketing/contacts", label: "Contacts", group: "marketing", icon: Users, badgeKey: "contacts" },
-  { href: "/marketing/segments", label: "Segments", group: "marketing", icon: Filter, badgeKey: "segments" },
-  { href: "/marketing/templates", label: "Templates", group: "marketing", icon: Palette, badgeKey: "templates" },
-  { href: "/marketing/analytics", label: "Analytics", group: "marketing", icon: BarChart3 },
-
-  { href: "/transactional/realtime", label: "Real time", group: "transactional", icon: Activity },
-  { href: "/transactional/templates", label: "Templates", group: "transactional", icon: Mail, badgeKey: "transactionalTemplates" },
-  { href: "/transactional/events", label: "Events", group: "transactional", icon: Zap, badgeKey: "eventRules" },
-  { href: "/transactional/logs", label: "Logs", group: "transactional", icon: ScrollText },
-  { href: "/transactional/analytics", label: "Analytics", group: "transactional", icon: BarChart3 },
-
-  { href: "/settings", label: "Settings", group: "system", icon: Settings },
+const SECTIONS: NavSection[] = [
+  { items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }] },
+  {
+    label: "Marketing",
+    items: [
+      { href: "/marketing/campaigns", label: "Campaigns", icon: Megaphone, live: "campaignsSending" },
+      { href: "/marketing/personal", label: "Personal mails", icon: Send },
+      { href: "/marketing/contacts", label: "Contacts", icon: Users },
+      { href: "/marketing/segments", label: "Segments", icon: Filter },
+      { href: "/marketing/templates", label: "Templates", icon: FileText },
+      { href: "/marketing/analytics", label: "Analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    label: "Transactional",
+    items: [
+      { href: "/transactional/realtime", label: "Real time", icon: Activity },
+      { href: "/transactional/templates", label: "Templates", icon: Mail },
+      { href: "/transactional/events", label: "Events", icon: Zap },
+      { href: "/transactional/logs", label: "Logs", icon: ScrollText },
+      { href: "/transactional/analytics", label: "Analytics", icon: BarChart3 },
+    ],
+  },
 ];
 
-const GROUP_LABEL: Record<NavGroup, string> = {
-  top: "",
-  marketing: "Marketing",
-  transactional: "Transactional",
-  system: "System",
+const CREATE: { label: string; href: string; icon: LucideIcon }[] = [
+  { label: "Campaign", href: "/marketing/campaigns/new", icon: Megaphone },
+  { label: "Personal mails", href: "/marketing/personal/new", icon: Send },
+  { label: "Klymb list", href: "/marketing/contacts/lists/klymb/new", icon: DatabaseZap },
+  { label: "Contact list", href: "/marketing/contacts/lists/new", icon: ListChecks },
+  { label: "Import contacts", href: "/marketing/contacts/import", icon: Upload },
+  { label: "Template", href: "/marketing/templates/new", icon: FileText },
+];
+
+const PALETTE_LINKS: PaletteLink[] = [
+  ...SECTIONS.flatMap((s) =>
+    s.items.map((i) => ({
+      label: i.label,
+      href: i.href,
+      icon: i.icon,
+      group: s.label ? `Go to · ${s.label}` : "Go to",
+    })),
+  ),
+  { label: "Contact lists", href: "/marketing/contacts/lists", icon: ListChecks, group: "Go to · Marketing" },
+  { label: "Settings", href: "/settings", icon: Settings, group: "Go to" },
+  {
+    label: "Senders",
+    href: "/settings/senders",
+    icon: Mail,
+    group: "Go to · Settings",
+    keywords: "domain brand ses",
+  },
+  {
+    label: "Suppressions",
+    href: "/settings/suppressions",
+    icon: X,
+    group: "Go to · Settings",
+    keywords: "unsubscribe bounce block",
+  },
+  {
+    label: "Users",
+    href: "/settings/users",
+    icon: UserCog,
+    group: "Go to · Settings",
+    keywords: "team members",
+  },
+  ...CREATE.map((c) => ({
+    label: `New ${c.label.toLowerCase()}`,
+    href: c.href,
+    icon: Plus,
+    group: "Create",
+    keywords: "add create new",
+  })),
+];
+
+// Path segment → breadcrumb label. Group-only segments ("marketing") are skipped.
+const CRUMB: Record<string, string | null> = {
+  dashboard: "Dashboard",
+  marketing: null,
+  transactional: null,
+  campaigns: "Campaigns",
+  personal: "Personal mails",
+  contacts: "Contacts",
+  lists: "Lists",
+  klymb: "Klymb list",
+  import: "Import",
+  imports: "Imports",
+  segments: "Segments",
+  templates: "Templates",
+  analytics: "Analytics",
+  realtime: "Real time",
+  events: "Events",
+  logs: "Logs",
+  settings: "Settings",
+  senders: "Senders",
+  suppressions: "Suppressions",
+  users: "Users",
+  audit: "Audit log",
+  account: "Account",
+  new: "New",
+  edit: "Edit",
+  filter: "Filter",
 };
 
-const COLLAPSE_KEY = "abt-mailer:sidebar-collapse";
-
-function formatBadge(n: number): string {
-  if (n === 0) return "";
-  if (n < 1000) return n.toString();
-  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
-  if (n < 1_000_000) return `${Math.floor(n / 1000)}k`;
-  return `${(n / 1_000_000).toFixed(1)}M`;
+function breadcrumbs(pathname: string): { label: string; href: string }[] {
+  const parts = pathname.split("/").filter(Boolean);
+  const out: { label: string; href: string }[] = [];
+  parts.forEach((p, i) => {
+    const href = `/${parts.slice(0, i + 1).join("/")}`;
+    const known = CRUMB[p];
+    if (known === null) return;
+    out.push({ label: known ?? (p.length > 12 ? "Details" : decodeURIComponent(p)), href });
+  });
+  return out;
 }
+
+const SIDEBAR_KEY = "mailer:sidebar";
 
 export function AppShell({
   user,
@@ -91,183 +184,336 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const groupsInOrder: NavGroup[] = ["top", "marketing", "transactional", "system"];
+  const router = useRouter();
+  const [compact, setCompact] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [theme, setTheme] = useState<ThemeChoice>("system");
 
-  // Per-group collapsed state, persisted in localStorage.
-  const [collapsed, setCollapsed] = useState<Record<NavGroup, boolean>>({
-    top: false,
-    marketing: false,
-    transactional: false,
-    system: false,
-  });
   useEffect(() => {
+    setTheme(readTheme());
     try {
-      const raw = window.localStorage.getItem(COLLAPSE_KEY);
-      if (raw) setCollapsed((c) => ({ ...c, ...JSON.parse(raw) }));
+      setCompact(localStorage.getItem(SIDEBAR_KEY) === "compact");
     } catch {
-      /* private-mode / disabled storage */
+      /* storage disabled */
     }
   }, []);
-  const toggle = (g: NavGroup) => {
-    setCollapsed((c) => {
-      const next = { ...c, [g]: !c[g] };
+  // Sticky bars on some pages offset themselves by the sidebar width.
+  useEffect(() => {
+    document.documentElement.style.setProperty("--sidebar-w", compact ? "4rem" : "15rem");
+  }, [compact]);
+  useEffect(() => setMobileOpen(false), [pathname]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  // "System" follows the OS live.
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => applyTheme("system");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [theme]);
+
+  const toggleCompact = () =>
+    setCompact((c) => {
       try {
-        window.localStorage.setItem(COLLAPSE_KEY, JSON.stringify(next));
+        localStorage.setItem(SIDEBAR_KEY, c ? "full" : "compact");
       } catch {
         /* noop */
       }
-      return next;
+      return !c;
     });
+  const chooseTheme = (t: ThemeChoice) => {
+    applyTheme(t);
+    setTheme(t);
   };
 
-  const initials =
-    (user.name ?? user.email ?? "?")
-      .split(/\s+|@/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((p) => p[0]?.toUpperCase() ?? "")
-      .join("") || "?";
+  const crumbs = breadcrumbs(pathname);
+  const canCreate = user.role !== "VIEWER";
+  const displayName = user.name?.trim() || user.email || "Account";
 
-  return (
-    <div className="relative flex min-h-screen overflow-hidden bg-slate-50 dark:bg-slate-950">
-      {/* Ambient background bubbles */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-40 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-emerald-200/20 blur-3xl dark:bg-emerald-900/10" />
-        <div className="absolute bottom-0 right-0 h-[400px] w-[400px] translate-x-1/4 translate-y-1/4 rounded-full bg-teal-200/20 blur-3xl dark:bg-teal-900/10" />
+  const sidebar = (isCompact: boolean) => (
+    <div className="flex h-full flex-col">
+      {/* Brand */}
+      <div
+        className={cn(
+          "flex h-14 shrink-0 items-center gap-2.5 border-b border-border",
+          isCompact ? "justify-center px-2" : "px-4",
+        )}
+      >
+        <Link href="/dashboard" className="flex items-center gap-2.5" title="Mailer">
+          <span className="grid h-7 w-7 place-items-center rounded-md bg-brand-600 text-white shadow-xs">
+            <Mail className="h-4 w-4" strokeWidth={2.25} />
+          </span>
+          {!isCompact && <span className="text-[15px] font-semibold tracking-tight">Mailer</span>}
+        </Link>
       </div>
-      <aside className="relative z-10 hidden w-72 shrink-0 flex-col border-r border-border/60 bg-white/90 backdrop-blur-sm dark:bg-slate-900/60 md:flex">
-        {/* Brand */}
-        <div className="flex items-center gap-3.5 px-6 py-6">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-base font-bold text-white shadow-lg shadow-emerald-500/25">
-            AB
-          </div>
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">ABTalks</div>
-            <div className="-mt-0.5 text-base font-bold">Mailer</div>
-          </div>
-        </div>
 
-        {/* Nav */}
-        <nav className="flex-1 space-y-6 px-4 pb-6">
-          {groupsInOrder.map((g) => {
-            const items = NAV.filter((n) => n.group === g);
-            if (items.length === 0) return null;
-            const isCollapsed = collapsed[g];
-            const groupLabel = GROUP_LABEL[g];
-            return (
-              <div key={g}>
-                {groupLabel ? (
-                  <button
-                    type="button"
-                    onClick={() => toggle(g)}
-                    className="mb-2 flex w-full items-center justify-between px-3 text-[11px] font-bold uppercase tracking-widest text-muted-foreground/80 transition hover:text-foreground"
-                  >
-                    <span>{groupLabel}</span>
-                    <ChevronDown
+      {/* Create — not for read-only viewers */}
+      {canCreate && (
+        <div className={cn("shrink-0 pt-3", isCompact ? "px-2" : "px-3")}>
+          <DropdownMenu
+            label="Create"
+            align="start"
+            trigger={
+              <span
+                className={cn(
+                  "flex h-9 w-full items-center justify-center gap-1.5 rounded-md bg-brand-600 text-sm font-medium text-white shadow-xs transition-colors hover:bg-brand-700",
+                )}
+                title="Create"
+              >
+                <Plus className="h-4 w-4" />
+                {!isCompact && "Create"}
+              </span>
+            }
+            items={CREATE.map((c) => ({ label: c.label, icon: c.icon, onSelect: () => router.push(c.href) }))}
+          />
+        </div>
+      )}
+
+      {/* Nav */}
+      <nav className={cn("flex-1 space-y-5 overflow-y-auto py-4", isCompact ? "px-2" : "px-3")}>
+        {SECTIONS.map((section, si) => (
+          <div key={si}>
+            {section.label &&
+              (isCompact ? (
+                <div className="mx-auto mb-2 h-px w-6 bg-border" />
+              ) : (
+                <div className="mb-1 px-2.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground/80">
+                  {section.label}
+                </div>
+              ))}
+            <ul className="space-y-0.5">
+              {section.items.map((item) => {
+                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const live = item.live ? counts[item.live] : 0;
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      title={isCompact ? item.label : undefined}
                       className={cn(
-                        "h-3.5 w-3.5 transition-transform duration-200",
-                        isCollapsed && "-rotate-90",
+                        "group relative flex h-8 items-center gap-2.5 rounded-md text-sm transition-colors",
+                        isCompact ? "justify-center" : "px-2.5",
+                        active
+                          ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-950/60 dark:text-brand-200"
+                          : "text-foreground/75 hover:bg-muted hover:text-foreground",
                       )}
-                    />
-                  </button>
-                ) : null}
-                <ul
-                  className={cn(
-                    "space-y-1.5 overflow-hidden transition-all duration-200",
-                    isCollapsed ? "max-h-0 opacity-0" : "max-h-[500px] opacity-100",
-                  )}
-                  aria-hidden={isCollapsed}
-                >
-                  {items.map((item) => {
-                    const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                    const Icon = item.icon;
-                    const badgeValue = item.badgeKey ? counts[item.badgeKey] : 0;
-                    const badgeText = formatBadge(badgeValue);
-                    return (
-                      <li key={item.href} className="relative">
-                        {active && (
-                          <span
-                            aria-hidden
-                            className="absolute -left-1 top-1/2 h-8 w-1.5 -translate-y-1/2 rounded-r-full bg-gradient-to-b from-emerald-500 to-teal-600 shadow-[0_0_12px_rgba(16,185,129,0.7)]"
-                          />
+                    >
+                      <item.icon
+                        className={cn(
+                          "h-4 w-4 shrink-0",
+                          active
+                            ? "text-brand-600 dark:text-brand-300"
+                            : "text-muted-foreground group-hover:text-foreground",
                         )}
-                        <Link
-                          href={item.href}
-                          className={cn(
-                            "group relative flex items-center gap-3.5 rounded-2xl px-3.5 py-3.5 text-[15px] font-semibold transition-all duration-200",
-                            active
-                              ? "bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-[1.02]"
-                              : "text-foreground/80 hover:translate-x-1 hover:bg-emerald-50/80 hover:text-foreground hover:shadow-sm dark:hover:bg-emerald-950/30",
-                          )}
-                        >
+                      />
+                      {!isCompact && <span className="flex-1 truncate">{item.label}</span>}
+                      {live > 0 &&
+                        (isCompact ? (
+                          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-brand-500" />
+                        ) : (
                           <span
-                            className={cn(
-                              "grid h-10 w-10 shrink-0 place-items-center rounded-xl transition",
-                              active
-                                ? "bg-white/20 shadow-inner"
-                                : "bg-slate-100 group-hover:bg-emerald-100 group-hover:scale-110 dark:bg-slate-800/60 dark:group-hover:bg-emerald-900/40",
-                            )}
+                            className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-1.5 text-2xs font-medium text-brand-800 dark:bg-brand-900 dark:text-brand-100"
+                            title={`${live} sending or scheduled`}
                           >
-                            <Icon
-                              className={cn(
-                                "h-5 w-5 transition-all duration-200",
-                                active
-                                  ? "text-white"
-                                  : "text-muted-foreground group-hover:text-emerald-600 dark:group-hover:text-emerald-300",
-                              )}
-                            />
+                            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-brand-500" />
+                            {live}
                           </span>
-                          <span className="flex-1 truncate">{item.label}</span>
-                          {badgeText && (
-                            <span
-                              className={cn(
-                                "min-w-[26px] rounded-full px-2 py-0.5 text-center text-[11px] font-bold tabular-nums transition",
-                                active
-                                  ? "bg-white/25 text-white shadow-sm"
-                                  : "bg-emerald-100 text-emerald-700 group-hover:scale-110 group-hover:bg-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300",
-                              )}
-                            >
-                              {badgeText}
-                            </span>
-                          )}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            );
-          })}
-        </nav>
-
-        {/* User pill */}
-        <div className="border-t border-border/60 p-4">
-          <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-slate-50 to-emerald-50/50 p-3 shadow-sm dark:from-slate-800/40 dark:to-emerald-950/20">
-            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-sm font-bold text-white shadow-lg shadow-emerald-500/30">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-semibold">{user.email}</div>
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{user.role}</div>
-            </div>
-            <button
-              type="button"
-              onClick={() => signOut({ callbackUrl: "/login" })}
-              className="rounded-lg p-2 text-muted-foreground transition hover:bg-white hover:text-rose-500 hover:shadow-sm dark:hover:bg-slate-900"
-              title="Sign out"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
+                        ))}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        </div>
-      </aside>
+        ))}
+      </nav>
 
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
-        <TopBar workspace={user.name ?? "ABTalks"} planLabel="Sandbox" />
-        <main className="flex-1">
-          <div className="container max-w-6xl px-6 py-8">{children}</div>
-        </main>
+      {/* Footer: settings + account */}
+      <div className={cn("shrink-0 space-y-0.5 border-t border-border py-2", isCompact ? "px-2" : "px-3")}>
+        <Link
+          href="/settings"
+          title={isCompact ? "Settings" : undefined}
+          className={cn(
+            "flex h-8 items-center gap-2.5 rounded-md text-sm transition-colors",
+            isCompact ? "justify-center" : "px-2.5",
+            pathname.startsWith("/settings")
+              ? "bg-brand-50 font-medium text-brand-800 dark:bg-brand-950/60 dark:text-brand-200"
+              : "text-foreground/75 hover:bg-muted hover:text-foreground",
+          )}
+        >
+          <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {!isCompact && "Settings"}
+        </Link>
+        <DropdownMenu
+          label="Account"
+          align="start"
+          side="top"
+          trigger={
+            <span
+              className={cn(
+                "flex items-center gap-2.5 rounded-md py-1.5 text-left transition-colors hover:bg-muted",
+                isCompact ? "justify-center" : "px-2",
+              )}
+            >
+              <Avatar name={displayName} className="h-7 w-7 text-[11px]" />
+              {!isCompact && (
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{displayName}</span>
+                  <span className="block truncate text-2xs capitalize text-muted-foreground">
+                    {user.role.toLowerCase()}
+                  </span>
+                </span>
+              )}
+            </span>
+          }
+          items={[
+            {
+              label: user.email ?? "Account",
+              icon: UserCog,
+              onSelect: () => router.push("/settings/account"),
+            },
+            "separator",
+            {
+              label: <ThemeLabel name="Light" on={theme === "light"} />,
+              icon: Sun,
+              onSelect: () => chooseTheme("light"),
+            },
+            {
+              label: <ThemeLabel name="Dark" on={theme === "dark"} />,
+              icon: Moon,
+              onSelect: () => chooseTheme("dark"),
+            },
+            {
+              label: <ThemeLabel name="System" on={theme === "system"} />,
+              icon: Monitor,
+              onSelect: () => chooseTheme("system"),
+            },
+            "separator",
+            {
+              label: "Sign out",
+              icon: LogOut,
+              danger: true,
+              onSelect: () => signOut({ callbackUrl: "/login" }),
+            },
+          ]}
+        />
+        <button
+          type="button"
+          onClick={toggleCompact}
+          className={cn(
+            "hidden h-8 w-full items-center gap-2.5 rounded-md text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:flex",
+            isCompact ? "justify-center" : "px-2.5",
+          )}
+          title={isCompact ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isCompact ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
+          {!isCompact && "Collapse"}
+        </button>
       </div>
     </div>
+  );
+
+  return (
+    <div className="flex min-h-screen bg-canvas">
+      {/* Desktop sidebar */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-background transition-[width] duration-200 md:block",
+          compact ? "w-16" : "w-60",
+        )}
+      >
+        {sidebar(compact)}
+      </aside>
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 animate-fade-in bg-slate-950/40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="absolute inset-y-0 left-0 w-64 animate-slide-in-right border-r border-border bg-background shadow-pop">
+            {sidebar(false)}
+          </aside>
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "flex min-w-0 flex-1 flex-col transition-[padding] duration-200",
+          compact ? "md:pl-16" : "md:pl-60",
+        )}
+      >
+        {/* Top bar */}
+        <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border bg-background/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 lg:px-8">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            className="-ml-1 rounded-md p-1.5 text-muted-foreground hover:bg-muted md:hidden"
+            aria-label="Open menu"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm">
+            {crumbs.map((c, i) => (
+              <span key={c.href} className="flex min-w-0 items-center gap-1">
+                {i > 0 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />}
+                {i === crumbs.length - 1 ? (
+                  <span className="truncate font-medium">{c.label}</span>
+                ) : (
+                  <Link href={c.href} className="truncate text-muted-foreground hover:text-foreground">
+                    {c.label}
+                  </Link>
+                )}
+              </span>
+            ))}
+          </nav>
+          <div className="flex-1" />
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="hidden h-8 w-64 items-center gap-2 rounded-md border border-input bg-background px-2.5 text-sm text-muted-foreground shadow-xs transition-colors hover:bg-muted sm:flex"
+          >
+            <Search className="h-3.5 w-3.5" />
+            <span className="flex-1 text-left">Search…</span>
+            <Kbd>Ctrl</Kbd>
+            <Kbd>K</Kbd>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPaletteOpen(true)}
+            className="rounded-md p-1.5 text-muted-foreground hover:bg-muted sm:hidden"
+            aria-label="Search"
+          >
+            <Search className="h-5 w-5" />
+          </button>
+        </header>
+
+        <main className="flex-1">
+          <div className="mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+        </main>
+      </div>
+
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={PALETTE_LINKS} />
+    </div>
+  );
+}
+
+function ThemeLabel({ name, on }: { name: string; on: boolean }) {
+  return (
+    <span className="flex flex-1 items-center justify-between gap-6">
+      {name}
+      {on && <Check className="h-3.5 w-3.5 text-brand-600" />}
+    </span>
   );
 }

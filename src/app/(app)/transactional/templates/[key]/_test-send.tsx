@@ -36,7 +36,7 @@ export function TestSendPanel({ templateKey, declaredVars }: { templateKey: stri
         </div>
         <div>
           <Label htmlFor="variables">Variables (JSON)</Label>
-          <Textarea id="variables" name="variables" rows={6} defaultValue={initialVars} />
+          <Textarea id="variables" name="variables" rows={6} defaultValue={initialVars} mono />
         </div>
         <div className="flex items-center justify-between">
           {result ? <span className="text-xs text-muted-foreground">{result}</span> : <span />}

@@ -2,42 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Design tokens. Neutrals are a cool grey; the one accent is the brand green
+ * (tailwind `brand` / `emerald` / `teal`, see tailwind.config.ts).
+ * `canvas` is the app background behind cards; `card` is the surface.
+ */
 @layer base {
   :root {
+    --canvas: 220 20% 97.5%;
     --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    --foreground: 222 30% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --primary: 222 47% 11%;
-    --primary-foreground: 210 40% 98%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 222 47% 11%;
+    --card-foreground: 222 30% 12%;
+    --muted: 220 16% 96%;
+    --muted-foreground: 220 9% 44%;
+    --primary: 160 74% 27.5%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 220 16% 96%;
+    --accent-foreground: 222 30% 12%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 14% 90%;
+    --input: 220 13% 86%;
+    --ring: 160 60% 35%;
     --radius: 0.5rem;
   }
 
   .dark {
-    --background: 222 47% 5%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 7%;
-    --card-foreground: 210 40% 98%;
-    --muted: 217 33% 17%;
-    --muted-foreground: 215 20% 65%;
-    --primary: 210 40% 98%;
-    --primary-foreground: 222 47% 11%;
-    --accent: 217 33% 17%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 63% 40%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 17%;
-    --input: 217 33% 17%;
-    --ring: 212 27% 84%;
+    --canvas: 222 22% 6%;
+    --background: 222 20% 9%;
+    --foreground: 220 15% 93%;
+    --card: 222 18% 10.5%;
+    --card-foreground: 220 15% 93%;
+    --muted: 222 15% 15%;
+    --muted-foreground: 220 9% 62%;
+    --primary: 158 55% 42%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 222 15% 15%;
+    --accent-foreground: 220 15% 93%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 14% 18%;
+    --input: 222 13% 24%;
+    --ring: 158 55% 45%;
   }
 }
 
@@ -45,7 +52,36 @@
   * {
     @apply border-border;
   }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-canvas text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  /*
+   * Most pages were written with literal white surfaces; in dark mode those
+   * follow the card colour instead of glaring white.
+   */
+  .dark .bg-white {
+    background-color: hsl(var(--card));
+  }
+  ::selection {
+    @apply bg-brand-200 text-brand-950;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  /* Quiet scrollbars, as in most SaaS apps. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+}
+
+@layer components {
+  /* Numbers line up in tables and KPI tiles. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
   }
 }

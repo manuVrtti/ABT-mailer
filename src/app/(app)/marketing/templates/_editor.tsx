@@ -220,6 +220,7 @@ export function MarketingTemplateEditor({
             <Textarea
               id="raw-html-input"
               rows={26}
+              mono
               spellCheck={false}
               value={rawHtml}
               onChange={(e) => setRawHtml(e.target.value)}

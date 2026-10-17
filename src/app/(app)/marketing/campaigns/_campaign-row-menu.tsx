@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BarChart3, Copy, Loader2, MoreVertical, Pencil, Trash2 } from "lucide-react";
 import { deleteCampaign, duplicateCampaign } from "./actions";
+import { confirmDialog, toast } from "@/components/overlay";
 
 /**
  * Per-row ⋮ menu on the campaigns list (Brevo-style): Edit, View report,
@@ -81,7 +82,7 @@ export function CampaignRowMenu({
               start(async () => {
                 const res = await duplicateCampaign(id);
                 setOpen(false);
-                if (!res.ok) return alert(res.error);
+                if (!res.ok) return toast.error("Couldn't duplicate", res.error);
                 router.push(`/marketing/campaigns/${res.id}/edit`);
               })
             }
@@ -96,12 +97,19 @@ export function CampaignRowMenu({
             className={`${item} text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10`}
             disabled={pending || Boolean(blockedReason)}
             title={blockedReason}
-            onClick={() => {
-              if (!confirm(`Delete “${name}”? This removes the campaign and its stats. It can’t be undone.`)) return;
+            onClick={async () => {
+              setOpen(false);
+              const ok = await confirmDialog({
+                title: `Delete “${name}”?`,
+                message: "This removes the campaign and its stats. It can't be undone.",
+                confirmLabel: "Delete campaign",
+                tone: "danger",
+              });
+              if (!ok) return;
               start(async () => {
                 const res = await deleteCampaign(id);
-                setOpen(false);
-                if (!res.ok) alert(res.error);
+                if (res.ok) toast.success("Campaign deleted");
+                else toast.error("Couldn't delete", res.error);
               });
             }}
           >

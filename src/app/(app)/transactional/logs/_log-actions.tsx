@@ -5,14 +5,20 @@ import { useRouter } from "next/navigation";
 import { Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui";
 import { deleteLogEmail, resendLogEmail } from "./actions";
+import { confirmDialog } from "@/components/overlay";
 
 export function LogActions({ jobId, canDelete }: { jobId: string; canDelete: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
-  function resend() {
-    if (!confirm("Send this email to the same recipient again?")) return;
+  async function resend() {
+    const ok = await confirmDialog({
+      title: "Send this email again?",
+      message: "The same email goes to the same recipient as a new send.",
+      confirmLabel: "Resend",
+    });
+    if (!ok) return;
     start(async () => {
       const res = await resendLogEmail(jobId);
       if (!res.ok) return setMessage({ ok: false, text: res.error });
@@ -21,8 +27,14 @@ export function LogActions({ jobId, canDelete }: { jobId: string; canDelete: boo
     });
   }
 
-  function remove() {
-    if (!confirm("Delete this log? Its delivery events are removed too. This can't be undone.")) return;
+  async function remove() {
+    const ok = await confirmDialog({
+      title: "Delete this log?",
+      message: "Its delivery events are removed too. This can't be undone.",
+      confirmLabel: "Delete log",
+      tone: "danger",
+    });
+    if (!ok) return;
     start(async () => {
       const res = await deleteLogEmail(jobId);
       if (!res.ok) return setMessage({ ok: false, text: res.error });

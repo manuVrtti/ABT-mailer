@@ -9,6 +9,7 @@ import {
   saveBrand,
   type SenderActionResult,
 } from "./actions";
+import { confirmDialog } from "@/components/overlay";
 
 function Message({ res }: { res: SenderActionResult | null }) {
   if (!res) return null;
@@ -41,8 +42,14 @@ export function BrandRowActions({ id, isDefault, canSend }: { id: string; isDefa
             variant="secondary"
             disabled={pending}
             className="text-destructive"
-            onClick={() => {
-              if (confirm("Delete this sender? Campaigns already sent are not affected.")) run(() => deleteBrand(id));
+            onClick={async () => {
+              const ok = await confirmDialog({
+                title: "Delete this sender?",
+                message: "Campaigns already sent are not affected.",
+                confirmLabel: "Delete sender",
+                tone: "danger",
+              });
+              if (ok) run(() => deleteBrand(id));
             }}
           >
             Delete

@@ -60,14 +60,14 @@ export function TemplateForm({
 
         <div>
           <Label htmlFor="html">HTML</Label>
-          <Textarea id="html" name="html" rows={14} required defaultValue={initial?.html ?? ""} />
+          <Textarea id="html" name="html" rows={14} required defaultValue={initial?.html ?? ""} mono />
           <p className="mt-1 text-xs text-muted-foreground">
             Use <code>{"{{variable}}"}</code> and <code>{'{{variable | default: "fallback"}}'}</code> for personalization.
           </p>
         </div>
         <div>
           <Label htmlFor="text">Plain-text alternative (optional but recommended)</Label>
-          <Textarea id="text" name="text" rows={6} defaultValue={initial?.text ?? ""} />
+          <Textarea id="text" name="text" rows={6} defaultValue={initial?.text ?? ""} mono />
         </div>
       </Card>
 
