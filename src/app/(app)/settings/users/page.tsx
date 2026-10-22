@@ -4,17 +4,24 @@ import { requireRole } from "@/lib/auth/session";
 import { PageHeader, Card, Input, Label, Select, Button, Table, THead, TR, TH, TD, Badge } from "@/components/ui";
 import { createUser } from "./actions";
 import { UserRowActions } from "./_row-actions";
+import { SenderAccessCell } from "./_sender-access";
+import { listBrands } from "@/server/brands";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Users & roles" };
 
 export default async function UsersPage() {
   await requireRole([Role.ADMIN]);
-  const users = await db.user.findMany({ orderBy: { createdAt: "desc" } });
+  const [users, brands] = await Promise.all([db.user.findMany({ orderBy: { createdAt: "desc" } }), listBrands()]);
+  const brandName = (key: string) => brands.find((b) => b.key === key)?.name ?? key;
+  const brandOptions = brands.map((b) => ({ key: b.key, name: b.name, domain: b.domain }));
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Users & roles" description="Only admins can create or modify accounts. Marketers can send; viewers are read-only." />
+      <PageHeader
+        title="Users & roles"
+        description="Only admins can create or modify accounts. Marketers can send; viewers are read-only. Sender access decides which brands each person can send as and see — campaigns, personal mails, logs, analytics and templates."
+      />
 
       <Card>
         <div className="mb-2 text-sm font-medium">Add teammate</div>
@@ -39,6 +46,24 @@ export default async function UsersPage() {
             <Label htmlFor="password">Initial password</Label>
             <Input id="password" name="password" type="password" minLength={10} required />
           </div>
+          <fieldset className="md:col-span-5">
+            <legend className="mb-1.5 text-xs font-medium text-foreground/80">Can send as</legend>
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+              <label className="flex items-center gap-2">
+                <input type="checkbox" name="allSenders" defaultChecked className="h-4 w-4" />
+                All senders, including ones added later
+              </label>
+              {brands.map((b) => (
+                <label key={b.key} className="flex items-center gap-2 text-muted-foreground">
+                  <input type="checkbox" name="brandKeys" value={b.key} className="h-4 w-4" />
+                  {b.name} <span className="text-xs">({b.domain})</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Untick &quot;All senders&quot; and tick brands to limit this person to them. Admins always have every sender.
+            </p>
+          </fieldset>
           <div className="md:col-span-5 flex justify-end">
             <Button type="submit">Create user</Button>
           </div>
@@ -54,6 +79,7 @@ export default async function UsersPage() {
             <TH>Email</TH>
             <TH>Name</TH>
             <TH>Role</TH>
+            <TH>Can send as</TH>
             <TH>Status</TH>
             <TH>Last sign-in</TH>
             <TH />
@@ -68,6 +94,23 @@ export default async function UsersPage() {
                 <Badge tone={u.role === Role.ADMIN ? "info" : u.role === Role.MARKETER ? "muted" : "warning"}>
                   {u.role}
                 </Badge>
+              </TD>
+              <TD>
+                <SenderAccessCell
+                  userId={u.id}
+                  name={u.name || u.email}
+                  isAdmin={u.role === Role.ADMIN}
+                  allSenders={u.allSenders}
+                  brandKeys={u.senderBrandKeys}
+                  brands={brandOptions}
+                  summary={
+                    u.role === Role.ADMIN || u.allSenders
+                      ? "All senders"
+                      : u.senderBrandKeys.length
+                        ? u.senderBrandKeys.map(brandName).join(", ")
+                        : "No senders"
+                  }
+                />
               </TD>
               <TD>
                 {u.isActive ? <Badge tone="success">Active</Badge> : <Badge tone="destructive">Disabled</Badge>}

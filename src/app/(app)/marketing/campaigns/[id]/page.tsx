@@ -8,6 +8,7 @@ import { CampaignConversions } from "./_conversions";
 import { requireUser } from "@/lib/auth/session";
 import { CampaignStatus, Role } from "@prisma/client";
 import { campaignAudienceSummary, campaignListIds } from "@/server/campaigns/audience";
+import { currentScope, requireVisible } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 // Launch/resume server actions run here; the launcher self-limits to ~40s.
@@ -41,6 +42,7 @@ export default async function CampaignDetailPage({
     },
   });
   if (!campaign) notFound();
+  requireVisible(await currentScope(), campaign.fromEmail);
   // Drafts belong on the inline edit page (sender/recipients/subject/design
   // sections + send controls). Detail is read-only for already-launched runs.
   if (campaign.status === CampaignStatus.DRAFT) {

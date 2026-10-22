@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
+import { currentScope, fromEmailWhere, templateWhere } from "@/server/access/scope";
 
 export type SearchHit = {
   kind: "campaign" | "personal" | "list" | "template" | "segment" | "contact";
@@ -13,14 +14,17 @@ export type SearchHit = {
 /** Global search for the Ctrl+K palette. A few results per kind, newest first. */
 export async function globalSearch(raw: string): Promise<SearchHit[]> {
   await requireUser();
+  // Campaigns, batches and templates are limited to this person's brands.
+  const scope = await currentScope();
+  const scoped = fromEmailWhere(scope);
   const q = raw.trim().slice(0, 100);
   if (q.length < 2) return [];
   const has = { contains: q, mode: "insensitive" as const };
   const [campaigns, personal, lists, templates, segments, contacts] = await Promise.all([
-    db.campaign.findMany({ where: { OR: [{ name: has }, { subject: has }] }, orderBy: { updatedAt: "desc" }, take: 5, select: { id: true, name: true, status: true, subject: true } }),
-    db.directSend.findMany({ where: { name: has }, orderBy: { createdAt: "desc" }, take: 4, select: { id: true, name: true, status: true, totalRows: true } }),
+    db.campaign.findMany({ where: { AND: [scoped, { OR: [{ name: has }, { subject: has }] }] }, orderBy: { updatedAt: "desc" }, take: 5, select: { id: true, name: true, status: true, subject: true } }),
+    db.directSend.findMany({ where: { AND: [scoped, { name: has }] }, orderBy: { createdAt: "desc" }, take: 4, select: { id: true, name: true, status: true, totalRows: true } }),
     db.contactList.findMany({ where: { name: has }, orderBy: { updatedAt: "desc" }, take: 4, select: { id: true, name: true, kind: true, _count: { select: { members: true } } } }),
-    db.emailTemplate.findMany({ where: { name: has }, orderBy: { updatedAt: "desc" }, take: 4, select: { id: true, name: true, category: true } }),
+    db.emailTemplate.findMany({ where: { AND: [templateWhere(scope), { name: has }] }, orderBy: { updatedAt: "desc" }, take: 4, select: { id: true, name: true, category: true } }),
     db.segment.findMany({ where: { name: has }, orderBy: { updatedAt: "desc" }, take: 3, select: { id: true, name: true } }),
     db.marketingContact.findMany({
       where: { OR: [{ email: has }, { firstName: has }, { lastName: has }] },

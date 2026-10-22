@@ -9,6 +9,7 @@ const send = (jobId: string, email: string, at: string, campaignId: string, clic
   sentAt: d(at),
   campaignId,
   directSendId: null,
+  fromEmail: "team@klymb.ai",
   clickTimes: clicks.map(d),
 });
 const act = (email: string, at: string, kind = "HACKATHON", ref: string | null = "h1"): Action => ({

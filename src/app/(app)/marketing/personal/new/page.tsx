@@ -2,7 +2,8 @@ import { Send } from "lucide-react";
 import { Role } from "@prisma/client";
 import { PageHeader } from "@/components/ui";
 import { requireRole } from "@/lib/auth/session";
-import { listBrands, sendableDefault } from "@/server/brands";
+import { sendableDefault } from "@/server/brands";
+import { currentScope, sendableSenders } from "@/server/access/scope";
 import { NewDirectSendForm } from "./_new-form";
 
 export const dynamic = "force-dynamic";
@@ -11,11 +12,10 @@ export const metadata = { title: "New personal mails" };
 
 export default async function NewDirectSendPage() {
   await requireRole([Role.ADMIN, Role.MARKETER]);
-  const brands = await listBrands();
-  const def = sendableDefault(brands);
-  const senders = brands
-    .filter((b) => b.sesVerified)
-    .flatMap((b) => b.fromAddresses.map((email) => ({ email, label: `${b.fromName} <${email}>` })));
+  // Only the brands this person may send as (all, for admins).
+  const scope = await currentScope();
+  const senders = sendableSenders(scope);
+  const def = scope.all ? sendableDefault(scope.brands) : scope.brands.find((b) => b.sesVerified);
   return (
     <div>
       <PageHeader
@@ -23,7 +23,7 @@ export default async function NewDirectSendPage() {
         icon={Send}
         description="Upload a CSV where every row is one email: who it goes to, its subject, its body and (optionally) its attachments."
       />
-      <NewDirectSendForm senders={senders} defaultSender={def.fromAddresses[0] ?? senders[0]?.email ?? ""} />
+      <NewDirectSendForm senders={senders} defaultSender={def?.fromAddresses[0] ?? senders[0]?.email ?? ""} />
     </div>
   );
 }

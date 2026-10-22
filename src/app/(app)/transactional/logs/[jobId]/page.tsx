@@ -10,6 +10,7 @@ import { eventDetail, type LogEvent } from "@/server/logs/query";
 import { EventPill, fmtIst } from "../_shared";
 import { LogActions } from "../_log-actions";
 import { LiveToggle } from "../_live";
+import { currentScope, requireVisible } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Email log" };
@@ -38,6 +39,7 @@ export default async function EmailLogDetailPage({ params }: { params: { jobId: 
     },
   });
   if (!job) notFound();
+  requireVisible(await currentScope(), job.fromEmail);
 
   // Campaign bodies are rendered at delivery time, so rebuild the same HTML.
   let html = job.renderedHtml;

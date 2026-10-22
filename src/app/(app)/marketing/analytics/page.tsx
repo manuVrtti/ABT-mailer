@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { BarChart3, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
-import { CampaignStatus, EmailEventType } from "@prisma/client";
+import { CampaignStatus, EmailEventType, Prisma } from "@prisma/client";
+import { currentScope, fromEmailSql, fromEmailWhere, type SenderScope } from "@/server/access/scope";
 import { PageHeader, Card, EmptyState, Badge, buttonClasses } from "@/components/ui";
 import { AnalyticsTabs } from "./_tabs";
 import { MetricBar } from "@/components/metric-bar";
@@ -10,14 +11,15 @@ import { LineChart, type LineSeries } from "@/components/line-chart";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Marketing analytics" };
 
-async function activitySeries14d() {
+async function activitySeries14d(scope: SenderScope) {
   const days = 14;
   const since = new Date();
   since.setDate(since.getDate() - (days - 1));
   since.setHours(0, 0, 0, 0);
   const sinceMs = since.getTime();
   const events = await db.emailEvent.findMany({
-    where: { createdAt: { gte: since } },
+    // Restricted people: only events of email sent from their brands.
+    where: { createdAt: { gte: since }, ...(scope.all ? {} : { job: fromEmailWhere(scope) }) },
     select: { createdAt: true, type: true },
   });
   const bucket = () => new Array<number>(days).fill(0);
@@ -41,8 +43,11 @@ async function activitySeries14d() {
 }
 
 export default async function MarketingAnalyticsPage() {
+  const scope = await currentScope();
+  const scoped = fromEmailWhere(scope);
   const [totals, campaigns, topClicks, activity] = await Promise.all([
     db.campaign.aggregate({
+      where: scoped,
       _sum: {
         totalRecipients: true,
         sentCount: true,
@@ -55,7 +60,7 @@ export default async function MarketingAnalyticsPage() {
       },
     }),
     db.campaign.findMany({
-      where: { status: { in: [CampaignStatus.COMPLETED, CampaignStatus.SENDING] } },
+      where: { AND: [scoped, { status: { in: [CampaignStatus.COMPLETED, CampaignStatus.SENDING] } }] },
       orderBy: { deliveredCount: "desc" },
       take: 20,
       select: {
@@ -71,14 +76,15 @@ export default async function MarketingAnalyticsPage() {
       },
     }),
     db.$queryRaw<Array<{ url: string; clicks: bigint }>>`
-      SELECT (raw->'click'->>'link') as url, COUNT(*)::bigint as clicks
-      FROM email_events
-      WHERE type = ${EmailEventType.CLICK}::"email_event_type" AND raw->'click'->>'link' IS NOT NULL
+      SELECT (e.raw->'click'->>'link') as url, COUNT(*)::bigint as clicks
+      FROM email_events e
+      LEFT JOIN email_jobs j ON j.id = e.job_id
+      WHERE e.type = ${EmailEventType.CLICK}::"email_event_type" AND e.raw->'click'->>'link' IS NOT NULL${fromEmailSql(scope, Prisma.sql`j.from_email`)}
       GROUP BY url
       ORDER BY clicks DESC
       LIMIT 10
     `.catch(() => [] as Array<{ url: string; clicks: bigint }>),
-    activitySeries14d(),
+    activitySeries14d(scope),
   ]);
 
   const sent = totals._sum.sentCount ?? 0;

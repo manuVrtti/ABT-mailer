@@ -185,6 +185,10 @@ model User {
   hashedPassword String   @map("hashed_password")
   role           Role     @default(VIEWER)
   isActive       Boolean  @default(true) @map("is_active")
+  // Which brands (Brand.key) this person can send as and see data for.
+  // allSenders = every brand, including ones added later. Admins always see all.
+  allSenders      Boolean  @default(true) @map("all_senders")
+  senderBrandKeys String[] @default([]) @map("sender_brand_keys")
   lastLoginAt    DateTime? @map("last_login_at")
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
@@ -363,6 +367,8 @@ model Segment {
 // Marketing templates — Unlayer visual editor
 model EmailTemplate {
   id           String   @id @default(cuid())
+  // Brand.key this template belongs to; null = shared by every brand.
+  brandKey     String?  @map("brand_key")
   name         String
   category     String   // Placement Drive / Workshop / Hackathon / Newsletter / etc.
   subject      String
@@ -818,6 +824,8 @@ model AttributedConversion {
   campaignId   String?  @map("campaign_id")
   directSendId String?  @map("direct_send_id")
   emailJobId   String   @map("email_job_id")
+  // Sender of the credited email, for per-brand access.
+  fromEmail    String   @default("") @map("from_email")
   email        String
   // SIGNUP | WORKSHOP | HACKATHON | VIDEOTHON | COHORT | JOB | MOCK_INTERVIEW
   kind         String

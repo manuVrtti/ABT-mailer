@@ -27,7 +27,7 @@ import { ActionsPanel } from "../_actions-panel";
 import { RecipientsPicker } from "./_recipients-picker";
 import { DesignStudio } from "./_design-studio";
 import { campaignAudienceSummary, campaignListIds, countListsAudience } from "@/server/campaigns/audience";
-import { listBrands } from "@/server/brands";
+import { currentScope, requireVisible, templateWhere } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 // Launch server action runs here; the launcher self-limits to ~40s.
@@ -53,6 +53,7 @@ export default async function CampaignEditPage({
     },
   });
   if (!campaign) notFound();
+  requireVisible(await currentScope(), campaign.fromEmail);
   if (campaign.status !== CampaignStatus.DRAFT) {
     redirect(`/marketing/campaigns/${campaign.id}`);
   }
@@ -291,7 +292,8 @@ async function SenderSection({
   // an unverified sender is refused by the action with a message instead. The
   // campaign's current address is kept in the list even if it isn't
   // configured, so saving never changes it by surprise.
-  const brands = await listBrands();
+  // Only the brands this person may send as (all, for admins).
+  const brands = (await currentScope()).brands;
   const options = brands.flatMap((b) =>
     b.fromAddresses.map((a) => ({ value: a, label: `${b.name} — ${a}`, verified: b.sesVerified })),
   );
@@ -546,6 +548,7 @@ async function DesignSection({
 }) {
   const templates = open
     ? await db.emailTemplate.findMany({
+        where: templateWhere(await currentScope()),
         orderBy: { updatedAt: "desc" },
         select: { id: true, name: true, category: true, previewText: true, updatedAt: true, html: true },
       })

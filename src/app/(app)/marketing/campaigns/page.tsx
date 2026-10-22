@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { CampaignStatus, Prisma } from "@prisma/client";
 import { PageHeader, Badge, Button, EmptyState } from "@/components/ui";
 import { CampaignRowMenu } from "./_campaign-row-menu";
+import { currentScope, fromEmailWhere } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Campaigns" };
@@ -42,16 +43,21 @@ export default async function CampaignsPage({
   const q = searchParams.q?.trim() ?? "";
   const active = FILTERS.find((f) => f.key === searchParams.status) ?? FILTERS[0]!;
 
+  // Only campaigns sent from this person's brands (all, for admins).
+  const scoped = fromEmailWhere(await currentScope());
   const where: Prisma.CampaignWhereInput = {
-    ...(q
-      ? {
-          OR: [
-            { name: { contains: q, mode: "insensitive" } },
-            { subject: { contains: q, mode: "insensitive" } },
-          ],
-        }
-      : {}),
-    ...(active.statuses ? { status: { in: active.statuses } } : {}),
+    AND: [
+      scoped,
+      q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { subject: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {},
+      active.statuses ? { status: { in: active.statuses } } : {},
+    ],
   };
 
   const [campaigns, grouped, totalCount] = await Promise.all([
@@ -65,8 +71,8 @@ export default async function CampaignsPage({
         template: { select: { name: true } },
       },
     }),
-    db.campaign.groupBy({ by: ["status"], _count: { _all: true } }),
-    db.campaign.count(),
+    db.campaign.groupBy({ by: ["status"], where: scoped, _count: { _all: true } }),
+    db.campaign.count({ where: scoped }),
   ]);
 
   const countByStatus = new Map(grouped.map((g) => [g.status, g._count._all]));

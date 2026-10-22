@@ -14,6 +14,7 @@ export interface Send {
   sentAt: Date;
   campaignId: string | null;
   directSendId: string | null;
+  fromEmail: string;
   /** Times this email's links were clicked (to tell "clicked → acted"). */
   clickTimes: Date[];
 }

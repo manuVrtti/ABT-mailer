@@ -15,7 +15,8 @@ import { extractVariables, renderTemplate } from "@/server/email/render";
 import { EmailService } from "@/server/email";
 import { getServerEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
-import { defaultBrand, listBrands, senderBrand } from "@/server/brands";
+import { brandForAddress, defaultBrand, listBrands, senderBrand } from "@/server/brands";
+import { canSendAs, canUseTemplate, currentScope } from "@/server/access/scope";
 
 function slugify(name: string): string {
   return (
@@ -35,6 +36,16 @@ async function uniqueSlug(base: string, ignoreId?: string): Promise<string> {
     slug = `${base}-${i + 1}`;
   }
   return `${base}-${Date.now().toString(36)}`;
+}
+
+/** Campaign actions only work on campaigns sent from this person's brands. */
+async function hasCampaignAccess(id: string): Promise<boolean> {
+  const c = await db.campaign.findUnique({ where: { id }, select: { fromEmail: true } });
+  return Boolean(c) && canSendAs(await currentScope(), c!.fromEmail);
+}
+
+async function assertCampaignAccess(id: string): Promise<void> {
+  if (!(await hasCampaignAccess(id))) throw new Error("You don't have access to this campaign's sender.");
 }
 
 // Create a fresh DRAFT. Only the campaign name is required — sender defaults
@@ -65,7 +76,11 @@ export async function createDraftCampaign(formData: FormData) {
 
   const slug = await uniqueSlug(slugify(parsed.name));
   // New campaigns start on the default brand (Settings → Senders).
-  const brand = await defaultBrand();
+  const scope = await currentScope();
+  const brand = scope.all
+    ? await defaultBrand()
+    : scope.brands.find((b) => b.isDefault && b.sesVerified) ?? scope.brands.find((b) => b.sesVerified) ?? scope.brands[0];
+  if (!brand) throw new Error("You don't have access to any sender yet. Ask an admin to give you one.");
 
   const campaign = await db.campaign.create({
     data: {
@@ -95,6 +110,7 @@ export async function createDraftCampaign(formData: FormData) {
 export async function updateCampaignName(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
+  await assertCampaignAccess(id);
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name required");
   await db.campaign.update({ where: { id }, data: { name } });
@@ -116,6 +132,7 @@ const senderSchema = z.object({
 export async function updateCampaignSender(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
+  await assertCampaignAccess(id);
   const result = senderSchema.safeParse({
     fromName: formData.get("fromName"),
     fromEmail: formData.get("fromEmail"),
@@ -126,6 +143,9 @@ export async function updateCampaignSender(formData: FormData) {
     redirect(`/marketing/campaigns/${id}/edit?open=sender&senderError=${encodeURIComponent(msg)}`);
   if (!result.success) back("Pick a From email and enter a From name (and a valid reply-to, if any).");
   const parsed = result.data!;
+  if (!canSendAs(await currentScope(), parsed.fromEmail)) {
+    back(`You don't have access to send as ${parsed.fromEmail}. Ask an admin for access to that sender.`);
+  }
   if (!senderBrand(await listBrands(), parsed.fromEmail)) {
     back(`${parsed.fromEmail} can't send yet — its domain isn't verified in SES. Pick another sender, or click "Check SES" in Settings → Senders once it's verified.`);
   }
@@ -141,6 +161,7 @@ export async function updateCampaignSender(formData: FormData) {
 export async function updateCampaignAudience(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
+  await assertCampaignAccess(id);
   const requestedListIds = Array.from(new Set(formData.getAll("listIds").map(String).filter(Boolean)));
   const segmentId = String(formData.get("segmentId") ?? "") || null;
 
@@ -178,6 +199,7 @@ const subjectSchema = z.object({
 export async function updateCampaignSubject(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
+  await assertCampaignAccess(id);
   const parsed = subjectSchema.parse({
     subject: formData.get("subject"),
     previewText: formData.get("previewText") || undefined,
@@ -199,6 +221,7 @@ export async function updateCampaignSubject(formData: FormData) {
 export async function updateCampaignDesign(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
+  await assertCampaignAccess(id);
   const mode = String(formData.get("mode") ?? "template");
   const campaign = await db.campaign.findUnique({ where: { id }, select: { id: true, subject: true, status: true } });
   if (!campaign) throw new Error("Campaign not found");
@@ -215,8 +238,11 @@ export async function updateCampaignDesign(formData: FormData) {
       const category = String(formData.get("templateCategory") ?? "Custom");
       if (!name) throw new Error("Template name is required");
       if (!(MARKETING_TEMPLATE_CATEGORIES as readonly string[]).includes(category)) throw new Error("Invalid category");
+      const owner = await db.campaign.findUnique({ where: { id }, select: { fromEmail: true } });
       const template = await db.emailTemplate.create({
         data: {
+          // Saved from a campaign: it belongs to that campaign's brand.
+          brandKey: owner ? (await brandForAddress(owner.fromEmail)).key : null,
           name,
           category,
           subject: campaign.subject.trim() || name,
@@ -243,6 +269,8 @@ export async function updateCampaignDesign(formData: FormData) {
     action = "campaign.update_design";
   } else {
     const templateId = z.string().min(1).parse(formData.get("templateId"));
+    const template = await db.emailTemplate.findUnique({ where: { id: templateId }, select: { brandKey: true } });
+    if (!template || !canUseTemplate(await currentScope(), template)) throw new Error("You can't use that template.");
     await db.campaign.update({ where: { id }, data: { templateId, customHtml: null } });
   }
 
@@ -255,6 +283,7 @@ export async function updateCampaignDesign(formData: FormData) {
 
 export async function sendCampaignTest(campaignId: string, to: string) {
   await requireRole([Role.ADMIN, Role.MARKETER]);
+  await assertCampaignAccess(campaignId);
   const campaign = await db.campaign.findUnique({ where: { id: campaignId }, include: { template: true } });
   const designHtml = campaign?.customHtml ?? campaign?.template?.html;
   if (!campaign || !designHtml) return { ok: false, error: "campaign design not found" };
@@ -284,6 +313,7 @@ export async function sendCampaignTest(campaignId: string, to: string) {
  */
 export async function estimateCampaign(campaignId: string, opts: { refreshKlymb?: boolean } = {}) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER, Role.VIEWER]);
+  if (!(await hasCampaignAccess(campaignId))) return { ok: false as const, error: "campaign not found" };
   const env = getServerEnv();
   const campaign = await db.campaign.findUnique({
     where: { id: campaignId },
@@ -333,6 +363,7 @@ export async function estimateCampaign(campaignId: string, opts: { refreshKlymb?
 export async function launchCampaign(formData: FormData) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
   const id = String(formData.get("id") ?? "");
+  await assertCampaignAccess(id);
   const scheduledForRaw = String(formData.get("scheduledFor") ?? "");
   const sendNow = formData.get("sendNow") === "on";
 
@@ -409,6 +440,7 @@ const IN_FLIGHT: CampaignStatus[] = [CampaignStatus.QUEUED, CampaignStatus.SENDI
 
 export async function deleteCampaign(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  if (!(await hasCampaignAccess(id))) return { ok: false, error: "You don't have access to this campaign's sender." };
   const campaign = await db.campaign.findUnique({ where: { id }, select: { status: true, name: true } });
   if (!campaign) return { ok: false, error: "Campaign not found." };
   if (IN_FLIGHT.includes(campaign.status)) {
@@ -445,6 +477,7 @@ export async function deleteCampaign(id: string): Promise<{ ok: true } | { ok: f
  */
 export async function duplicateCampaign(id: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  if (!(await hasCampaignAccess(id))) return { ok: false, error: "You don't have access to this campaign's sender." };
   const src = await db.campaign.findUnique({ where: { id } });
   if (!src) return { ok: false, error: "Campaign not found." };
 
@@ -485,6 +518,7 @@ export async function duplicateCampaign(id: string): Promise<{ ok: true; id: str
 
 export async function cancelCampaign(id: string) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  await assertCampaignAccess(id);
   const campaign = await db.campaign.findUnique({ where: { id } });
   if (!campaign) throw new Error("Not found");
   if (campaign.status === CampaignStatus.COMPLETED) throw new Error("Already completed");
@@ -500,6 +534,7 @@ export async function cancelCampaign(id: string) {
 
 export async function pauseCampaign(id: string) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  await assertCampaignAccess(id);
   await db.campaign.update({ where: { id }, data: { status: CampaignStatus.PAUSED } });
   await db.auditLog.create({
     data: { userId: user.id, action: "campaign.pause", resource: `campaign:${id}`, result: "success" },
@@ -509,6 +544,7 @@ export async function pauseCampaign(id: string) {
 
 export async function resumeCampaign(id: string) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  await assertCampaignAccess(id);
   await db.campaign.update({ where: { id }, data: { status: CampaignStatus.SENDING } });
   await db.auditLog.create({
     data: { userId: user.id, action: "campaign.resume", resource: `campaign:${id}`, result: "success" },
