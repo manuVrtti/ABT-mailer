@@ -40,6 +40,7 @@ import { cn } from "@/lib/utils";
 import { Avatar, Kbd } from "./ui";
 import { DropdownMenu, applyTheme, readTheme, type ThemeChoice } from "./overlay";
 import { CommandPalette, type PaletteLink } from "./command-palette";
+import type { Permission } from "@/server/access/permission-defs";
 
 export type NavCounts = {
   campaigns: number;
@@ -53,7 +54,7 @@ export type NavCounts = {
   deliveryLogs: number;
 };
 
-type NavItem = { href: string; label: string; icon: LucideIcon; live?: keyof NavCounts };
+type NavItem = { href: string; label: string; icon: LucideIcon; live?: keyof NavCounts; needs?: Permission };
 type NavSection = { label?: string; items: NavItem[] };
 
 const SECTIONS: NavSection[] = [
@@ -66,28 +67,38 @@ const SECTIONS: NavSection[] = [
       { href: "/marketing/contacts", label: "Contacts", icon: Users },
       { href: "/marketing/segments", label: "Segments", icon: Filter },
       { href: "/marketing/templates", label: "Templates", icon: FileText },
-      { href: "/marketing/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/marketing/analytics", label: "Analytics", icon: BarChart3, needs: "analytics.view" },
     ],
   },
   {
     label: "Transactional",
     items: [
-      { href: "/transactional/realtime", label: "Real time", icon: Activity },
+      { href: "/transactional/realtime", label: "Real time", icon: Activity, needs: "logs.view" },
       { href: "/transactional/templates", label: "Templates", icon: Mail },
       { href: "/transactional/events", label: "Events", icon: Zap },
-      { href: "/transactional/logs", label: "Logs", icon: ScrollText },
-      { href: "/transactional/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/transactional/logs", label: "Logs", icon: ScrollText, needs: "logs.view" },
+      { href: "/transactional/analytics", label: "Analytics", icon: BarChart3, needs: "analytics.view" },
     ],
   },
 ];
 
-const CREATE: { label: string; href: string; icon: LucideIcon }[] = [
-  { label: "Campaign", href: "/marketing/campaigns/new", icon: Megaphone },
-  { label: "Personal mails", href: "/marketing/personal/new", icon: Send },
-  { label: "Klymb list", href: "/marketing/contacts/lists/klymb/new", icon: DatabaseZap },
-  { label: "Contact list", href: "/marketing/contacts/lists/new", icon: ListChecks },
-  { label: "Import contacts", href: "/marketing/contacts/import", icon: Upload },
-  { label: "Template", href: "/marketing/templates/new", icon: FileText },
+const CREATE: { label: string; href: string; icon: LucideIcon; needs: Permission }[] = [
+  { label: "Campaign", href: "/marketing/campaigns/new", icon: Megaphone, needs: "campaigns.manage" },
+  { label: "Personal mails", href: "/marketing/personal/new", icon: Send, needs: "personal.manage" },
+  {
+    label: "Klymb list",
+    href: "/marketing/contacts/lists/klymb/new",
+    icon: DatabaseZap,
+    needs: "contacts.manage",
+  },
+  {
+    label: "Contact list",
+    href: "/marketing/contacts/lists/new",
+    icon: ListChecks,
+    needs: "contacts.manage",
+  },
+  { label: "Import contacts", href: "/marketing/contacts/import", icon: Upload, needs: "contacts.manage" },
+  { label: "Template", href: "/marketing/templates/new", icon: FileText, needs: "templates.manage" },
 ];
 
 const PALETTE_LINKS: PaletteLink[] = [
@@ -154,6 +165,7 @@ const CRUMB: Record<string, string | null> = {
   senders: "Senders",
   suppressions: "Suppressions",
   users: "Users",
+  permissions: "Roles & permissions",
   audit: "Audit log",
   account: "Account",
   new: "New",
@@ -178,12 +190,25 @@ const SIDEBAR_KEY = "mailer:sidebar";
 export function AppShell({
   user,
   counts,
+  permissions,
   children,
 }: {
   user: { name?: string | null; email?: string | null; role: Role };
   counts: NavCounts;
+  /** What this person's role may do; hides nav items and create actions. */
+  permissions: Permission[];
   children: React.ReactNode;
 }) {
+  const can = (p?: Permission) => !p || permissions.includes(p);
+  const createItems = CREATE.filter((c) => can(c.needs));
+  const navSections = SECTIONS.map((sec) => ({
+    ...sec,
+    items: sec.items.filter((i) => can(i.needs)),
+  })).filter((sec) => sec.items.length > 0);
+  const hidden = new Set(
+    [...SECTIONS.flatMap((x) => x.items), ...CREATE].filter((i) => !can(i.needs)).map((i) => i.href),
+  );
+  const paletteLinks = PALETTE_LINKS.filter((l) => !hidden.has(l.href));
   const pathname = usePathname();
   const router = useRouter();
   const [compact, setCompact] = useState(false);
@@ -238,7 +263,7 @@ export function AppShell({
   };
 
   const crumbs = breadcrumbs(pathname);
-  const canCreate = user.role !== "VIEWER";
+  const canCreate = createItems.length > 0;
   const displayName = user.name?.trim() || user.email || "Account";
 
   const sidebar = (isCompact: boolean) => (
@@ -275,14 +300,18 @@ export function AppShell({
                 {!isCompact && "Create"}
               </span>
             }
-            items={CREATE.map((c) => ({ label: c.label, icon: c.icon, onSelect: () => router.push(c.href) }))}
+            items={createItems.map((c) => ({
+              label: c.label,
+              icon: c.icon,
+              onSelect: () => router.push(c.href),
+            }))}
           />
         </div>
       )}
 
       {/* Nav */}
       <nav className={cn("flex-1 space-y-5 overflow-y-auto py-4", isCompact ? "px-2" : "px-3")}>
-        {SECTIONS.map((section, si) => (
+        {navSections.map((section, si) => (
           <div key={si}>
             {section.label &&
               (isCompact ? (
@@ -505,7 +534,7 @@ export function AppShell({
         </main>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={PALETTE_LINKS} />
+      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} links={paletteLinks} />
     </div>
   );
 }

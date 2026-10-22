@@ -1,10 +1,12 @@
 import { PageHeader, Card, Button, Label } from "@/components/ui";
 import { startCsvImport } from "../actions";
+import { requirePermission } from "@/server/access/permissions";
 
 export const metadata = { title: "Import contacts" };
 export const maxDuration = 60;
 
-export default function ImportContactsPage() {
+export default async function ImportContactsPage() {
+  await requirePermission("contacts.manage");
   return (
     <div>
       <PageHeader

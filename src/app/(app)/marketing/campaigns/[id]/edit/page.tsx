@@ -28,6 +28,7 @@ import { RecipientsPicker } from "./_recipients-picker";
 import { DesignStudio } from "./_design-studio";
 import { campaignAudienceSummary, campaignListIds, countListsAudience } from "@/server/campaigns/audience";
 import { currentScope, requireVisible, templateWhere } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // Launch server action runs here; the launcher self-limits to ~40s.
@@ -44,6 +45,7 @@ export default async function CampaignEditPage({
   params: { id: string };
   searchParams: { open?: string; senderError?: string };
 }) {
+  await requirePermission("campaigns.manage");
   const campaign = await db.campaign.findUnique({
     where: { id: params.id },
     include: {

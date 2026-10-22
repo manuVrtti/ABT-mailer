@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
 import { currentScope, fromEmailWhere } from "@/server/access/scope";
 import { AppShell, type NavCounts } from "@/components/app-shell";
+import { currentPermissions } from "@/server/access/permissions";
 
 async function getNavCounts(): Promise<NavCounts> {
   const scoped = fromEmailWhere(await currentScope());
@@ -47,7 +48,7 @@ async function getNavCounts(): Promise<NavCounts> {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const [user, counts] = await Promise.all([requireUser(), getNavCounts()]);
   return (
-    <AppShell user={user} counts={counts}>
+    <AppShell user={user} counts={counts} permissions={Array.from(await currentPermissions())}>
       {children}
     </AppShell>
   );

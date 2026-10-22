@@ -7,6 +7,7 @@ import { PageHeader, Card, EmptyState, Badge, buttonClasses } from "@/components
 import { AnalyticsTabs } from "./_tabs";
 import { MetricBar } from "@/components/metric-bar";
 import { LineChart, type LineSeries } from "@/components/line-chart";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Marketing analytics" };
@@ -43,6 +44,7 @@ async function activitySeries14d(scope: SenderScope) {
 }
 
 export default async function MarketingAnalyticsPage() {
+  await requirePermission("analytics.view");
   const scope = await currentScope();
   const scoped = fromEmailWhere(scope);
   const [totals, campaigns, topClicks, activity] = await Promise.all([

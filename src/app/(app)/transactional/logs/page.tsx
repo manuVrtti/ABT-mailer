@@ -5,6 +5,7 @@ import { LOG_EVENTS, LOG_EVENT_LABEL, parseLogFilters, queryEmailLogs, type LogF
 import { EventPill, fmtIst } from "./_shared";
 import { LiveToggle } from "./_live";
 import { currentScope } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Logs" };
@@ -26,6 +27,7 @@ function qs(f: LogFilters, extra: Record<string, string> = {}): string {
 }
 
 export default async function EmailLogsPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
+  await requirePermission("logs.view");
   const f = parseLogFilters(searchParams);
   const { rows, total, nextBefore } = await queryEmailLogs(f, PAGE_SIZE, await currentScope());
 

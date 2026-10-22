@@ -789,6 +789,17 @@ model ImportRowError {
   @@map("import_row_errors")
 }
 
+// What each non-admin role may do (src/server/access/permissions.ts). A role
+// without a row uses the built-in defaults; admins can always do everything.
+model RolePermission {
+  role        Role     @id
+  permissions String[]
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("role_permissions")
+}
+
 // ---------------------------------------------------------------------------
 // Audit log
 // ---------------------------------------------------------------------------

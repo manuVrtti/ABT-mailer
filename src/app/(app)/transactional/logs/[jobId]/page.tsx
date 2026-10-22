@@ -11,6 +11,7 @@ import { EventPill, fmtIst } from "../_shared";
 import { LogActions } from "../_log-actions";
 import { LiveToggle } from "../_live";
 import { currentScope, requireVisible } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Email log" };
@@ -29,6 +30,7 @@ const FROM_TYPE: Record<EmailEventType, LogEvent | null> = {
 type Step = { at: Date; event: LogEvent | "requested"; label: string; lines: string[] };
 
 export default async function EmailLogDetailPage({ params }: { params: { jobId: string } }) {
+  await requirePermission("logs.view");
   const job = await db.emailJob.findUnique({
     where: { id: params.jobId },
     include: {

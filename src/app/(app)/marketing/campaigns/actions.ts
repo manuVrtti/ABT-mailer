@@ -17,6 +17,7 @@ import { getServerEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { brandForAddress, defaultBrand, listBrands, senderBrand } from "@/server/brands";
 import { canSendAs, canUseTemplate, currentScope } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 function slugify(name: string): string {
   return (
@@ -59,7 +60,7 @@ const createSchema = z.object({
 });
 
 export async function createDraftCampaign(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   const env = getServerEnv();
   const parsed = createSchema.parse({
     name: formData.get("name"),
@@ -108,7 +109,7 @@ export async function createDraftCampaign(formData: FormData) {
 
 // Rename the draft (inline pencil on the edit page header).
 export async function updateCampaignName(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   const id = String(formData.get("id") ?? "");
   await assertCampaignAccess(id);
   const name = String(formData.get("name") ?? "").trim();
@@ -130,7 +131,7 @@ const senderSchema = z.object({
 });
 
 export async function updateCampaignSender(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   const id = String(formData.get("id") ?? "");
   await assertCampaignAccess(id);
   const result = senderSchema.safeParse({
@@ -159,7 +160,7 @@ export async function updateCampaignSender(formData: FormData) {
 
 // Recipients section: one or more lists, OR a single segment.
 export async function updateCampaignAudience(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   const id = String(formData.get("id") ?? "");
   await assertCampaignAccess(id);
   const requestedListIds = Array.from(new Set(formData.getAll("listIds").map(String).filter(Boolean)));
@@ -197,7 +198,7 @@ const subjectSchema = z.object({
 });
 
 export async function updateCampaignSubject(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   const id = String(formData.get("id") ?? "");
   await assertCampaignAccess(id);
   const parsed = subjectSchema.parse({
@@ -219,7 +220,7 @@ export async function updateCampaignSubject(formData: FormData) {
  * case the campaign simply points at the new template.
  */
 export async function updateCampaignDesign(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   const id = String(formData.get("id") ?? "");
   await assertCampaignAccess(id);
   const mode = String(formData.get("mode") ?? "template");
@@ -282,7 +283,7 @@ export async function updateCampaignDesign(formData: FormData) {
 }
 
 export async function sendCampaignTest(campaignId: string, to: string) {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("campaigns.manage");
   await assertCampaignAccess(campaignId);
   const campaign = await db.campaign.findUnique({ where: { id: campaignId }, include: { template: true } });
   const designHtml = campaign?.customHtml ?? campaign?.template?.html;
@@ -361,7 +362,7 @@ export async function estimateCampaign(campaignId: string, opts: { refreshKlymb?
  * launcher picks up SCHEDULED campaigns whose time has arrived.
  */
 export async function launchCampaign(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   const id = String(formData.get("id") ?? "");
   await assertCampaignAccess(id);
   const scheduledForRaw = String(formData.get("scheduledFor") ?? "");
@@ -439,7 +440,7 @@ export async function launchCampaign(formData: FormData) {
 const IN_FLIGHT: CampaignStatus[] = [CampaignStatus.QUEUED, CampaignStatus.SENDING, CampaignStatus.PAUSED];
 
 export async function deleteCampaign(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   if (!(await hasCampaignAccess(id))) return { ok: false, error: "You don't have access to this campaign's sender." };
   const campaign = await db.campaign.findUnique({ where: { id }, select: { status: true, name: true } });
   if (!campaign) return { ok: false, error: "Campaign not found." };
@@ -476,7 +477,7 @@ export async function deleteCampaign(id: string): Promise<{ ok: true } | { ok: f
  * edited and launched like any new campaign.
  */
 export async function duplicateCampaign(id: string): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   if (!(await hasCampaignAccess(id))) return { ok: false, error: "You don't have access to this campaign's sender." };
   const src = await db.campaign.findUnique({ where: { id } });
   if (!src) return { ok: false, error: "Campaign not found." };
@@ -517,7 +518,7 @@ export async function duplicateCampaign(id: string): Promise<{ ok: true; id: str
 }
 
 export async function cancelCampaign(id: string) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   await assertCampaignAccess(id);
   const campaign = await db.campaign.findUnique({ where: { id } });
   if (!campaign) throw new Error("Not found");
@@ -533,7 +534,7 @@ export async function cancelCampaign(id: string) {
 }
 
 export async function pauseCampaign(id: string) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   await assertCampaignAccess(id);
   await db.campaign.update({ where: { id }, data: { status: CampaignStatus.PAUSED } });
   await db.auditLog.create({
@@ -543,7 +544,7 @@ export async function pauseCampaign(id: string) {
 }
 
 export async function resumeCampaign(id: string) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   await assertCampaignAccess(id);
   await db.campaign.update({ where: { id }, data: { status: CampaignStatus.SENDING } });
   await db.auditLog.create({

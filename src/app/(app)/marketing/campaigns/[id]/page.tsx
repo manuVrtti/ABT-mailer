@@ -9,6 +9,7 @@ import { requireUser } from "@/lib/auth/session";
 import { CampaignStatus, Role } from "@prisma/client";
 import { campaignAudienceSummary, campaignListIds } from "@/server/campaigns/audience";
 import { currentScope, requireVisible } from "@/server/access/scope";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // Launch/resume server actions run here; the launcher self-limits to ~40s.
@@ -147,7 +148,7 @@ export default async function CampaignDetailPage({
         />
       </div>
 
-      {campaign.startedAt && <CampaignConversions campaign={campaign} canEdit={user.role !== Role.VIEWER} />}
+      {campaign.startedAt && <CampaignConversions campaign={campaign} canEdit={(await currentPermissions()).has("campaigns.manage")} />}
 
       {campaign.startedAt && (
         <RecipientActivitySection

@@ -11,6 +11,7 @@ import { normalizeEmail } from "@/lib/utils";
 import { detectColumns, extractContact, isHeaderless, type ExtractedContact } from "@/lib/csv-columns";
 
 import { CONTACT_LIST_COLORS as LIST_COLORS } from "./_constants";
+import { requirePermission } from "@/server/access/permissions";
 
 const createListSchema = z.object({
   name: z.string().min(1).max(120),
@@ -19,7 +20,7 @@ const createListSchema = z.object({
 });
 
 export async function createList(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const parsed = createListSchema.parse({
     name: String(formData.get("name") ?? "").trim(),
     description: String(formData.get("description") ?? "").trim() || undefined,
@@ -42,7 +43,7 @@ export async function createList(formData: FormData) {
 }
 
 export async function updateList(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const id = String(formData.get("id") ?? "");
   const parsed = createListSchema.parse({
     name: String(formData.get("name") ?? "").trim(),
@@ -61,7 +62,7 @@ export async function updateList(formData: FormData) {
 }
 
 export async function deleteList(id: string) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   await db.contactList.delete({ where: { id } });
   await db.auditLog.create({
     data: { userId: user.id, action: "list.delete", resource: `list:${id}`, result: "success" },
@@ -75,7 +76,7 @@ export async function deleteList(id: string) {
  * a contact are ignored; duplicates are skipped by the composite PK.
  */
 export async function addMembersByEmail(listId: string, rawEmails: string) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const emails = Array.from(
     new Set(
       rawEmails
@@ -131,7 +132,7 @@ const MAX_LIST_CSV_BYTES = 10 * 1024 * 1024;
  * list. Existing contacts keep their data unless the CSV provides a value.
  */
 export async function importCsvToList(formData: FormData): Promise<ListImportResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const listId = String(formData.get("listId") ?? "");
   const file = formData.get("file");
   if (!listId) return { ok: false, error: "Missing list." };
@@ -266,7 +267,7 @@ function stripUndefined<T extends Record<string, unknown>>(o: T): Partial<T> {
 }
 
 export async function removeMember(listId: string, contactId: string) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const list = await db.contactList.findUnique({ where: { id: listId }, select: { kind: true } });
   // On a Klymb list the next refresh would add them straight back, so the
   // removal is remembered as an "always exclude" for their address.

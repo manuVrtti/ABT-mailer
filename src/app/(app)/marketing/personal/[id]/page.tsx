@@ -12,6 +12,7 @@ import { attachmentsForRow, checkDirectSendReady, renderDirectEmail } from "@/se
 import { directSendStats, rowActivity } from "@/server/direct-send/stats";
 import { AttachmentsManager, AutoRefresh, CancelButton, DeleteButton, LaunchButton, TestSend } from "./_controls";
 import { currentScope, requireVisible } from "@/server/access/scope";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // Launching creates and queues one job per row.
@@ -51,7 +52,7 @@ export default async function DirectSendPage({
   searchParams: { row?: string; page?: string; show?: string };
 }) {
   const user = await requireRole([Role.ADMIN, Role.MARKETER, Role.VIEWER]);
-  const canEdit = user.role !== Role.VIEWER;
+  const canEdit = (await currentPermissions()).has("personal.manage");
   const send = await db.directSend.findUnique({
     where: { id: params.id },
     include: { attachments: { select: { id: true, filename: true, size: true, forAll: true, contentType: true }, orderBy: { filename: "asc" } } },

@@ -3,6 +3,7 @@ import { Megaphone } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Card, Input, Button } from "@/components/ui";
 import { createDraftCampaign } from "../actions";
+import { requirePermission } from "@/server/access/permissions";
 
 export const metadata = { title: "Create an email campaign" };
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function CreateCampaignPage({
 }: {
   searchParams: { listId?: string; segmentId?: string };
 }) {
+  await requirePermission("campaigns.manage");
   let preselectedLabel: string | null = null;
   if (searchParams.listId) {
     const l = await db.contactList.findUnique({ where: { id: searchParams.listId }, select: { name: true } });

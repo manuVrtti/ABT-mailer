@@ -10,7 +10,8 @@ export default async function SettingsIndexPage() {
   const sections = [
     { href: "/settings/senders", title: "Senders", desc: "Brands you send as (Klymb, ABTalks…), their From addresses and SES status." },
     { href: "/settings/account", title: "Your account", desc: "Change your own password." },
-    { href: "/settings/users", title: "Users & roles", desc: "Invite teammates and assign admin, marketer, or viewer roles." },
+    { href: "/settings/users", title: "Users & roles", desc: "Invite teammates, assign roles, and choose which senders each person can use." },
+    { href: "/settings/permissions", title: "Roles & permissions", desc: "Tick what marketers and viewers are allowed to do." },
     { href: "/settings/suppressions", title: "Suppressions", desc: "Emails blocked from marketing or transactional sends." },
     { href: "/settings/audit", title: "Audit log", desc: "Sensitive actions logged for compliance and support." },
   ];
@@ -18,7 +19,7 @@ export default async function SettingsIndexPage() {
     <div className="space-y-6">
       <PageHeader title="Settings" description="Team, sender identity, deliverability, and integrations." />
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
         {sections.map((s) => (
           <Link key={s.href} href={s.href} className="block rounded-lg border border-border bg-card p-4 hover:bg-accent">
             <div className="text-sm font-medium">{s.title}</div>

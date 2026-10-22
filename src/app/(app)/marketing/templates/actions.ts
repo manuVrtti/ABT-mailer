@@ -10,9 +10,10 @@ import { EmailService } from "@/server/email";
 import { renderTemplate } from "@/server/email/render";
 import { MARKETING_TEMPLATE_CATEGORIES } from "./categories";
 import { canEditTemplate, canUseTemplate, currentScope } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 export async function saveMarketingTemplate(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("templates.manage");
   const id = String(formData.get("id") ?? "") || undefined;
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "Custom");
@@ -82,7 +83,7 @@ export async function saveMarketingTemplate(formData: FormData) {
 }
 
 export async function sendMarketingTestEmail(templateId: string, to: string) {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("templates.manage");
   if (!to || !templateId) return { ok: false, error: "template and recipient required" };
   const tpl = await db.emailTemplate.findUnique({ where: { id: templateId } });
   const scope = await currentScope();
@@ -110,7 +111,7 @@ export async function sendMarketingTestEmail(templateId: string, to: string) {
 }
 
 export async function duplicateMarketingTemplate(id: string) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("templates.manage");
   const src = await db.emailTemplate.findUnique({ where: { id } });
   const scope = await currentScope();
   if (!src || !canUseTemplate(scope, src)) throw new Error("Template not found");
