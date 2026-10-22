@@ -3,10 +3,12 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { SegmentBuilder } from "../_builder";
 import { ruleTreeSchema } from "@/server/segments/schema";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function SegmentDetailPage({ params }: { params: { id: string } }) {
+  await requireAccess("contacts.manage");
   const segment = await db.segment.findUnique({ where: { id: params.id } });
   if (!segment) notFound();
 

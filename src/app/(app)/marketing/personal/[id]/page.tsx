@@ -13,6 +13,7 @@ import { directSendStats, rowActivity } from "@/server/direct-send/stats";
 import { AttachmentsManager, AutoRefresh, CancelButton, DeleteButton, LaunchButton, TestSend } from "./_controls";
 import { currentScope, requireVisible } from "@/server/access/scope";
 import { currentPermissions } from "@/server/access/permissions";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // Launching creates and queues one job per row.
@@ -51,6 +52,7 @@ export default async function DirectSendPage({
   params: { id: string };
   searchParams: { row?: string; page?: string; show?: string };
 }) {
+  await requireAccess("personal.manage");
   const user = await requireRole([Role.ADMIN, Role.MARKETER, Role.VIEWER]);
   const canEdit = (await currentPermissions()).has("personal.manage");
   const send = await db.directSend.findUnique({

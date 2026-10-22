@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { batchSummaries } from "@/server/direct-send/stats";
 import { currentScope, fromEmailWhere } from "@/server/access/scope";
 import { currentPermissions } from "@/server/access/permissions";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Personal mails" };
@@ -77,6 +78,7 @@ export default async function DirectSendsPage({
 }: {
   searchParams: { q?: string; status?: string; type?: string; from?: string; period?: string; sort?: string; page?: string };
 }) {
+  await requireAccess("personal.manage");
   const user = await requireRole([Role.ADMIN, Role.MARKETER, Role.VIEWER]);
   const q = (searchParams.q ?? "").trim().slice(0, 200);
   const status = pick<StatusKey>(searchParams.status, STATUSES, "all");

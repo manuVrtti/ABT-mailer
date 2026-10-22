@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { PageHeader, Card, Badge, Table, THead, TR, TH, TD, EmptyState } from "@/components/ui";
 import type { ImportJobStatus } from "@prisma/client";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ const statusTone: Record<ImportJobStatus, "muted" | "success" | "warning" | "des
 };
 
 export default async function ImportDetailPage({ params }: { params: { id: string } }) {
+  await requireAccess("contacts.manage");
   const job = await db.importJob.findUnique({
     where: { id: params.id },
     include: { createdBy: { select: { email: true } }, errors: { orderBy: { rowNumber: "asc" }, take: 100 } },

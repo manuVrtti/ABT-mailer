@@ -5,6 +5,9 @@ import { db } from "@/lib/db";
 import { PageHeader, Button, EmptyState, Badge } from "@/components/ui";
 import { ContactsTabs } from "../_tabs";
 import { CONTACT_LIST_COLORS } from "./_constants";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
+import { canSeeKlymb, contactListWhere, currentScope } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contact lists" };
@@ -45,6 +48,10 @@ export default async function ContactListsPage({
 }: {
   searchParams: { q?: string; sort?: string; color?: string; size?: string };
 }) {
+  await requireAccess("contacts.manage");
+  const canEdit = (await currentPermissions()).has("contacts.manage");
+  const scope = await currentScope();
+  const klymb = canSeeKlymb(scope);
   const q = (searchParams.q ?? "").trim().slice(0, 200);
   const sort: SortKey =
     searchParams.sort && searchParams.sort in SORTS ? (searchParams.sort as SortKey) : "newest";
@@ -58,6 +65,7 @@ export default async function ContactListsPage({
   const lists = await db.contactList.findMany({
     where: {
       AND: [
+        contactListWhere(scope),
         q
           ? {
               OR: [
@@ -84,16 +92,20 @@ export default async function ContactListsPage({
         icon={ListChecks}
         description="Named buckets of contacts — Candidates, Recruiters, Hackathon Participants, etc. A contact can belong to many lists."
         actions={
-          <>
-            <Button as="a" variant="secondary" href="/marketing/contacts/lists/new">
-              <Plus className="mr-1 h-4 w-4" />
-              New list
-            </Button>
-            <Button as="a" href="/marketing/contacts/lists/klymb/new">
-              <DatabaseZap className="mr-1 h-4 w-4" />
-              New Klymb list
-            </Button>
-          </>
+          canEdit && (
+            <>
+              <Button as="a" variant={klymb ? "secondary" : "primary"} href="/marketing/contacts/lists/new">
+                <Plus className="mr-1 h-4 w-4" />
+                New list
+              </Button>
+              {klymb && (
+                <Button as="a" href="/marketing/contacts/lists/klymb/new">
+                  <DatabaseZap className="mr-1 h-4 w-4" />
+                  New Klymb list
+                </Button>
+              )}
+            </>
+          )
         }
       />
 
@@ -162,10 +174,12 @@ export default async function ContactListsPage({
           title="No lists yet"
           description="Create your first list — try 'Candidates', 'Recruiters', 'Hackathon Participants', 'Alumni'."
           action={
-            <Button as="a" href="/marketing/contacts/lists/new">
-              <Plus className="mr-1 h-4 w-4" />
-              Create list
-            </Button>
+            canEdit ? (
+              <Button as="a" href="/marketing/contacts/lists/new">
+                <Plus className="mr-1 h-4 w-4" />
+                Create list
+              </Button>
+            ) : undefined
           }
         />
       ) : (

@@ -11,6 +11,8 @@ import { DeleteListButton } from "./_delete-button";
 import { AddMembersPanel } from "./_add-members";
 import { ImportCsvPanel } from "./_import-csv";
 import { RemoveMemberButton } from "./_remove-member";
+import { requireAccess } from "@/server/access/permissions";
+import { canSeeKlymb, currentScope } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 // CSV imports and Klymb refreshes run as server actions on this route.
@@ -50,6 +52,7 @@ export default async function ListDetailPage({
   params: { id: string };
   searchParams: { q?: string };
 }) {
+  await requireAccess("contacts.manage");
   const q = (searchParams.q ?? "").trim().slice(0, 200);
   // Every word must match the email, first name, last name or college, so
   // "jahanvi pratap" finds first "jahanvi" + last "pratap".
@@ -99,6 +102,7 @@ export default async function ListDetailPage({
   if (!list) notFound();
 
   const isKlymb = list.kind === ContactListKind.KLYMB;
+  if (isKlymb && !canSeeKlymb(await currentScope())) notFound();
   const filter = isKlymb ? klymbFilterSchema.safeParse(list.klymbFilter) : null;
   const stats = (list.syncStats ?? null) as KlymbSyncStats | null;
 

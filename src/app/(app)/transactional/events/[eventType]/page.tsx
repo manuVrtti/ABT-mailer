@@ -2,10 +2,12 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { RuleForm } from "../_rule-form";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function EditEventRulePage({ params }: { params: { eventType: string } }) {
+  await requireAccess("transactional.manage");
   const eventType = decodeURIComponent(params.eventType);
   const rule = await db.emailEventRule.findUnique({ where: { eventType } });
   if (!rule) notFound();

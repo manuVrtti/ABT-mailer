@@ -7,6 +7,8 @@ import { ContactsTabs } from "../../../_tabs";
 import { KlymbListForm } from "../_klymb-form";
 import { KlymbUnavailable, loadOptionsOrError } from "../_options";
 import { requirePermission } from "@/server/access/permissions";
+import { notFound } from "next/navigation";
+import { canSeeKlymb, currentScope } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 // Creating the list also loads everyone it matches from Klymb.
@@ -15,6 +17,7 @@ export const metadata = { title: "New Klymb list" };
 
 export default async function NewKlymbListPage() {
   await requirePermission("contacts.manage");
+  if (!canSeeKlymb(await currentScope())) notFound();
   const res = await loadOptionsOrError();
   return (
     <div>

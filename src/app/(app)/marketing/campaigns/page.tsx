@@ -5,6 +5,8 @@ import { CampaignStatus, Prisma } from "@prisma/client";
 import { PageHeader, Badge, Button, EmptyState } from "@/components/ui";
 import { CampaignRowMenu } from "./_campaign-row-menu";
 import { currentScope, fromEmailWhere } from "@/server/access/scope";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Campaigns" };
@@ -40,6 +42,8 @@ export default async function CampaignsPage({
 }: {
   searchParams: { q?: string; status?: string };
 }) {
+  await requireAccess("campaigns.manage");
+  const canEdit = (await currentPermissions()).has("campaigns.manage");
   const q = searchParams.q?.trim() ?? "";
   const active = FILTERS.find((f) => f.key === searchParams.status) ?? FILTERS[0]!;
 
@@ -93,7 +97,7 @@ export default async function CampaignsPage({
         title="Campaigns"
         description="One-off and recurring marketing emails. Every send is filtered against suppression before touching the queue."
         icon={Megaphone}
-        actions={<Button as="a" href="/marketing/campaigns/new">New campaign</Button>}
+        actions={canEdit && <Button as="a" href="/marketing/campaigns/new">New campaign</Button>}
       />
 
       {totalCount === 0 ? (
@@ -101,7 +105,7 @@ export default async function CampaignsPage({
           icon={Megaphone}
           title="No campaigns yet"
           description="Create your first campaign — pick an audience, a template, and hit send."
-          action={<Button as="a" href="/marketing/campaigns/new">Create campaign</Button>}
+          action={canEdit ? <Button as="a" href="/marketing/campaigns/new">Create campaign</Button> : undefined}
         />
       ) : (
         <>
@@ -220,7 +224,7 @@ export default async function CampaignsPage({
                           <ArrowRight className="hidden h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition group-hover:opacity-100 lg:inline" />
                         </div>
                       </Link>
-                      <div className="pr-3">
+                      <div className={canEdit ? "pr-3" : "hidden"}>
                         <CampaignRowMenu
                           id={c.id}
                           name={c.name}

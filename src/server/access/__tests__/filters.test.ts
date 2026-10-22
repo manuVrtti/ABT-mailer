@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  canSeeKlymb,
+  contactListWhere,
   assertSendAs,
   canEditTemplate,
   canSendAs,
@@ -62,5 +64,21 @@ describe("sender access", () => {
     expect(sendableSenders(klymbOnly).map((s) => s.email)).toEqual(["team@klymb.ai", "no-reply@klymb.ai"]);
     const unverified: SenderScope = { all: false, brands: [brand("new", "new.io", false)], brandKeys: ["new"], domains: ["new.io"] };
     expect(sendableSenders(unverified)).toEqual([]);
+  });
+});
+
+describe("Klymb lists", () => {
+  const abtalksOnly: SenderScope = { all: false, brands: [abtalks], brandKeys: ["abtalks"], domains: ["abtalks.in"] };
+
+  it("are visible to admins / all-sender people and to people with the Klymb brand", () => {
+    expect(canSeeKlymb(everyone)).toBe(true);
+    expect(canSeeKlymb(klymbOnly)).toBe(true);
+    expect(contactListWhere(klymbOnly)).toEqual({});
+  });
+
+  it("are hidden from everyone else", () => {
+    expect(canSeeKlymb(abtalksOnly)).toBe(false);
+    expect(canSeeKlymb(nobody)).toBe(false);
+    expect(contactListWhere(abtalksOnly)).toEqual({ kind: { not: "KLYMB" } });
   });
 });

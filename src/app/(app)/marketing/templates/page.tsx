@@ -3,6 +3,8 @@ import { Palette, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Badge, Button, EmptyState } from "@/components/ui";
 import { currentScope, templateWhere } from "@/server/access/scope";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Marketing templates" };
@@ -10,6 +12,8 @@ export const metadata = { title: "Marketing templates" };
 const UPDATED = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
 
 export default async function MarketingTemplatesPage() {
+  await requireAccess("templates.manage");
+  const canEdit = (await currentPermissions()).has("templates.manage");
   const scope = await currentScope();
   const templates = await db.emailTemplate.findMany({ where: templateWhere(scope), orderBy: { updatedAt: "desc" } });
   const brandName = (key: string | null) => (key ? scope.brands.find((b) => b.key === key)?.name ?? key : "Shared");
@@ -19,14 +23,14 @@ export default async function MarketingTemplatesPage() {
         title="Marketing templates"
         icon={Palette}
         description="Reusable email designs. Personalization uses {{first_name}}-style tokens."
-        actions={<Button as="a" href="/marketing/templates/new">New template</Button>}
+        actions={canEdit && <Button as="a" href="/marketing/templates/new">New template</Button>}
       />
       {templates.length === 0 ? (
         <EmptyState
           icon={Palette}
           title="No templates yet"
           description="Design your first template — paste HTML or use the visual editor."
-          action={<Button as="a" href="/marketing/templates/new">Create template</Button>}
+          action={canEdit ? <Button as="a" href="/marketing/templates/new">Create template</Button> : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

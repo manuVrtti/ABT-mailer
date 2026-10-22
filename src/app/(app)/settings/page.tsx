@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { PageHeader, Card } from "@/components/ui";
 import { getServerEnv } from "@/lib/env";
+import { requireUser } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Settings" };
 
 export default async function SettingsIndexPage() {
+  if ((await requireUser()).role !== "ADMIN") redirect("/settings/account");
   const env = getServerEnv();
   const sections = [
     { href: "/settings/senders", title: "Senders", desc: "Brands you send as (Klymb, ABTalks…), their From addresses and SES status." },
