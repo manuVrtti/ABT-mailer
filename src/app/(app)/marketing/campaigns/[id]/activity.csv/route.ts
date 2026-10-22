@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getSession, hasRole } from "@/lib/auth/session";
 import { ACTIVITY_FILTERS, getRecipientActivity, type ActivityFilter } from "@/server/campaigns/activity";
+import { canSendAs, scopeForUser } from "@/server/access/scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,8 +15,10 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!hasRole(session.user.role, [Role.VIEWER])) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const campaign = await db.campaign.findUnique({ where: { id: params.id }, select: { slug: true } });
-  if (!campaign) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const campaign = await db.campaign.findUnique({ where: { id: params.id }, select: { slug: true, fromEmail: true } });
+  if (!campaign || !canSendAs(await scopeForUser(session.user.id, session.user.role), campaign.fromEmail)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
 
   const url = new URL(req.url);
   const a = url.searchParams.get("activity") ?? "all";

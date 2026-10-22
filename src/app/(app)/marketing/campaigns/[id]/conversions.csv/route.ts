@@ -3,6 +3,7 @@ import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getSession, hasRole } from "@/lib/auth/session";
 import { KIND_LABELS, goalMatches, parseGoal, type ConversionKind } from "@/server/conversions/kinds";
+import { canSendAs, scopeForUser } from "@/server/access/scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,8 +13,10 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const session = await getSession();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   if (!hasRole(session.user.role, [Role.VIEWER])) return NextResponse.json({ error: "forbidden" }, { status: 403 });
-  const campaign = await db.campaign.findUnique({ where: { id: params.id }, select: { slug: true, conversionGoal: true } });
-  if (!campaign) return NextResponse.json({ error: "not_found" }, { status: 404 });
+  const campaign = await db.campaign.findUnique({ where: { id: params.id }, select: { slug: true, conversionGoal: true, fromEmail: true } });
+  if (!campaign || !canSendAs(await scopeForUser(session.user.id, session.user.role), campaign.fromEmail)) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
   const goal = parseGoal(campaign.conversionGoal);
   const rows = await db.attributedConversion.findMany({ where: { campaignId: params.id }, orderBy: { actionAt: "asc" } });
 

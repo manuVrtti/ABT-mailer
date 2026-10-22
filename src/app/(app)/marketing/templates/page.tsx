@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Palette, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Badge, Button, EmptyState } from "@/components/ui";
+import { currentScope, templateWhere } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Marketing templates" };
@@ -9,7 +10,9 @@ export const metadata = { title: "Marketing templates" };
 const UPDATED = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", year: "numeric" });
 
 export default async function MarketingTemplatesPage() {
-  const templates = await db.emailTemplate.findMany({ orderBy: { updatedAt: "desc" } });
+  const scope = await currentScope();
+  const templates = await db.emailTemplate.findMany({ where: templateWhere(scope), orderBy: { updatedAt: "desc" } });
+  const brandName = (key: string | null) => (key ? scope.brands.find((b) => b.key === key)?.name ?? key : "Shared");
   return (
     <div>
       <PageHeader
@@ -48,7 +51,10 @@ export default async function MarketingTemplatesPage() {
               <div className="flex flex-1 flex-col p-4">
                 <div className="flex items-start justify-between gap-2">
                   <div className="line-clamp-1 font-medium">{t.name}</div>
-                  <Badge tone="muted">{t.category}</Badge>
+                  <span className="flex shrink-0 gap-1">
+                    <Badge tone={t.brandKey ? "info" : "muted"}>{brandName(t.brandKey)}</Badge>
+                    <Badge tone="muted">{t.category}</Badge>
+                  </span>
                 </div>
                 <div className="mt-1 line-clamp-1 text-xs text-muted-foreground">{t.subject || "No subject"}</div>
                 <div className="mt-auto flex items-center justify-between pt-3 text-xs text-muted-foreground">

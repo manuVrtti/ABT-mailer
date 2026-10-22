@@ -1,5 +1,6 @@
 import { EmailEventType, EmailJobStatus, EmailType, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { fromEmailWhere, type SenderScope } from "@/server/access/filters";
 
 /**
  * Brevo-style email log: one row per thing that happened to an email —
@@ -186,10 +187,12 @@ const NOT_SENT: EmailJobStatus[] = [EmailJobStatus.FAILED, EmailJobStatus.SKIPPE
 export async function queryEmailLogs(
   f: LogFilters,
   limit: number,
+  scope?: SenderScope,
 ): Promise<{ rows: LogRow[]; total: number; nextBefore: Date | null }> {
   const { start, end } = dayRange(f);
   const upper = f.before && f.before < end ? f.before : end;
-  const job = jobWhere(f);
+  // Restricted people only see email sent from their brands.
+  const job: Prisma.EmailJobWhereInput = scope ? { AND: [jobWhere(f), fromEmailWhere(scope)] } : jobWhere(f);
 
   const sesType = f.event === "all" ? undefined : SES_TYPE[f.event];
   const wantSes = f.event === "all" || sesType !== undefined;

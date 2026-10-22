@@ -4,6 +4,7 @@ import { PageHeader, Table, THead, TR, TH, TD, EmptyState, Button } from "@/comp
 import { LOG_EVENTS, LOG_EVENT_LABEL, parseLogFilters, queryEmailLogs, type LogFilters } from "@/server/logs/query";
 import { EventPill, fmtIst } from "./_shared";
 import { LiveToggle } from "./_live";
+import { currentScope } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Logs" };
@@ -26,7 +27,7 @@ function qs(f: LogFilters, extra: Record<string, string> = {}): string {
 
 export default async function EmailLogsPage({ searchParams }: { searchParams: Record<string, string | undefined> }) {
   const f = parseLogFilters(searchParams);
-  const { rows, total, nextBefore } = await queryEmailLogs(f, PAGE_SIZE);
+  const { rows, total, nextBefore } = await queryEmailLogs(f, PAGE_SIZE, await currentScope());
 
   return (
     <div>

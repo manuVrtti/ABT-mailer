@@ -18,6 +18,7 @@ import { ActivityChart } from "@/components/activity-chart";
 import { Sparkline } from "@/components/sparkline";
 import { cn } from "@/lib/utils";
 import { conversionTotals } from "@/server/conversions/stats";
+import { currentScope, fromEmailSql, fromEmailWhere, type SenderScope } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard" };
@@ -44,7 +45,7 @@ type PeriodRow = { cur: boolean; sent: number; delivered: number; opened: number
  * mixes this period's opens with last period's sends. Automated transactional
  * mail (OTPs, receipts) is left out — it would distort open rates.
  */
-async function periodStats(curStart: Date, prevStart: Date) {
+async function periodStats(curStart: Date, prevStart: Date, scope: SenderScope) {
   const rows = await db.$queryRaw<PeriodRow[]>(Prisma.sql`
     SELECT (j.sent_at >= ${curStart}) AS cur,
       count(*)::int AS sent,
@@ -54,21 +55,21 @@ async function periodStats(curStart: Date, prevStart: Date) {
       count(*) FILTER (WHERE j.status = 'BOUNCED' OR EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'BOUNCE'))::int AS bounced,
       count(*) FILTER (WHERE j.status = 'COMPLAINED' OR EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'COMPLAINT'))::int AS complained
     FROM email_jobs j
-    WHERE (j.campaign_id IS NOT NULL OR j.direct_send_id IS NOT NULL) AND j.sent_at >= ${prevStart}
+    WHERE (j.campaign_id IS NOT NULL OR j.direct_send_id IS NOT NULL) AND j.sent_at >= ${prevStart}${fromEmailSql(scope, Prisma.sql`j.from_email`)}
     GROUP BY 1`);
   const empty: PeriodRow = { cur: true, sent: 0, delivered: 0, opened: 0, clicked: 0, bounced: 0, complained: 0 };
   return { cur: rows.find((r) => r.cur) ?? empty, prev: rows.find((r) => !r.cur) ?? { ...empty, cur: false } };
 }
 
 /** Per-day sent / opened / clicked (IST days) for the chart. */
-async function dailySeries(start: Date) {
+async function dailySeries(start: Date, scope: SenderScope) {
   const rows = await db.$queryRaw<{ d: string; sent: number; opened: number; clicked: number }[]>(Prisma.sql`
     SELECT to_char(j.sent_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS d,
       count(*)::int AS sent,
       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'OPEN'))::int AS opened,
       count(*) FILTER (WHERE EXISTS (SELECT 1 FROM email_events e WHERE e.job_id = j.id AND e.type = 'CLICK'))::int AS clicked
     FROM email_jobs j
-    WHERE (j.campaign_id IS NOT NULL OR j.direct_send_id IS NOT NULL) AND j.sent_at >= ${start}
+    WHERE (j.campaign_id IS NOT NULL OR j.direct_send_id IS NOT NULL) AND j.sent_at >= ${start}${fromEmailSql(scope, Prisma.sql`j.from_email`)}
     GROUP BY 1`);
   const byDay = new Map(rows.map((r) => [r.d, r]));
   const fmt = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
@@ -109,11 +110,14 @@ export default async function DashboardPage() {
   const curStart = new Date(now - WINDOW * DAY);
   const prevStart = new Date(now - 2 * WINDOW * DAY);
   const weekAgo = new Date(now - 7 * DAY);
+  // Only email from this person's brands (all, for admins).
+  const scope = await currentScope();
+  const scoped = fromEmailWhere(scope);
 
   const [period, series, contacts, newContacts, newContactsPrev, contactSeries, lists, klymbLists, suppressed, recentCampaigns, recentPersonal, txn, conv] =
     await Promise.all([
-      periodStats(curStart, prevStart),
-      dailySeries(curStart),
+      periodStats(curStart, prevStart, scope),
+      dailySeries(curStart, scope),
       db.marketingContact.count(),
       db.marketingContact.count({ where: { createdAt: { gte: curStart } } }),
       db.marketingContact.count({ where: { createdAt: { gte: prevStart, lt: curStart } } }),
@@ -122,6 +126,7 @@ export default async function DashboardPage() {
       db.contactList.count({ where: { kind: ContactListKind.KLYMB } }),
       db.suppression.count(),
       db.campaign.findMany({
+        where: scoped,
         orderBy: { updatedAt: "desc" },
         take: 6,
         select: {
@@ -137,13 +142,13 @@ export default async function DashboardPage() {
           scheduledAt: true,
         },
       }),
-      db.directSend.findMany({ orderBy: { createdAt: "desc" }, take: 3, select: { id: true, name: true, status: true, totalRows: true, createdAt: true } }),
+      db.directSend.findMany({ where: scoped, orderBy: { createdAt: "desc" }, take: 3, select: { id: true, name: true, status: true, totalRows: true, createdAt: true } }),
       db.emailJob.groupBy({
         by: ["status"],
-        where: { emailType: EmailType.TRANSACTIONAL, directSendId: null, createdAt: { gte: weekAgo } },
+        where: { AND: [scoped, { emailType: EmailType.TRANSACTIONAL, directSendId: null, createdAt: { gte: weekAgo } }] },
         _count: { _all: true },
       }),
-      conversionTotals(WINDOW),
+      conversionTotals(WINDOW, scope),
     ]);
 
   const { cur, prev } = period;

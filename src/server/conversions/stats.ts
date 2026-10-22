@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { goalMatches, type ConversionGoal, type ConversionKind } from "./kinds";
+import { fromEmailSql, fromEmailWhere, type SenderScope } from "@/server/access/filters";
 
 /**
  * Read side of conversions. Everything here reads attributed_conversions
@@ -76,19 +77,20 @@ export interface ConversionOverview {
 
 const DAY = 86_400_000;
 
-export async function conversionOverview(days: number): Promise<ConversionOverview> {
+export async function conversionOverview(days: number, scope: SenderScope): Promise<ConversionOverview> {
+  const scoped = fromEmailWhere(scope);
   const now = Date.now();
   const cur = new Date(now - days * DAY);
   const prev = new Date(now - 2 * days * DAY);
 
   const [rows, prevRows, emailed, prevEmailed] = await Promise.all([
     db.attributedConversion.findMany({
-      where: { actionAt: { gte: cur } },
+      where: { AND: [scoped, { actionAt: { gte: cur } }] },
       select: { campaignId: true, directSendId: true, email: true, kind: true, ref: true, clicked: true, actionAt: true },
     }),
-    db.attributedConversion.findMany({ where: { actionAt: { gte: prev, lt: cur } }, select: { email: true } }),
-    distinctRecipients(cur, new Date(now)),
-    distinctRecipients(prev, cur),
+    db.attributedConversion.findMany({ where: { AND: [scoped, { actionAt: { gte: prev, lt: cur } }] }, select: { email: true } }),
+    distinctRecipients(cur, new Date(now), scope),
+    distinctRecipients(prev, cur, scope),
   ]);
 
   // Per day, IST.
@@ -174,19 +176,22 @@ export async function conversionOverview(days: number): Promise<ConversionOvervi
   };
 }
 
-async function distinctRecipients(from: Date, to: Date): Promise<number> {
+async function distinctRecipients(from: Date, to: Date, scope: SenderScope): Promise<number> {
   const [r] = await db.$queryRaw<{ n: number }[]>(Prisma.sql`
     SELECT count(DISTINCT lower(recipient_email))::int AS n FROM email_jobs
-    WHERE (campaign_id IS NOT NULL OR direct_send_id IS NOT NULL) AND sent_at >= ${from} AND sent_at < ${to}`);
+    WHERE (campaign_id IS NOT NULL OR direct_send_id IS NOT NULL) AND sent_at >= ${from} AND sent_at < ${to}${fromEmailSql(scope, Prisma.sql`from_email`)}`);
   return r?.n ?? 0;
 }
 
 /** Conversions in the last `days` and the `days` before, for the dashboard tile. */
-export async function conversionTotals(days: number): Promise<{ cur: number; prev: number }> {
+export async function conversionTotals(days: number, scope: SenderScope): Promise<{ cur: number; prev: number }> {
   const now = Date.now();
+  const scoped = fromEmailWhere(scope);
   const [cur, prev] = await Promise.all([
-    db.attributedConversion.count({ where: { actionAt: { gte: new Date(now - days * DAY) } } }),
-    db.attributedConversion.count({ where: { actionAt: { gte: new Date(now - 2 * days * DAY), lt: new Date(now - days * DAY) } } }),
+    db.attributedConversion.count({ where: { AND: [scoped, { actionAt: { gte: new Date(now - days * DAY) } }] } }),
+    db.attributedConversion.count({
+      where: { AND: [scoped, { actionAt: { gte: new Date(now - 2 * days * DAY), lt: new Date(now - days * DAY) } }] },
+    }),
   ]);
   return { cur, prev };
 }

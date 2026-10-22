@@ -7,6 +7,7 @@ import { requireRole } from "@/lib/auth/session";
 import { renderCampaignHtml } from "@/server/campaigns/launcher";
 import { enqueueDelivery } from "@/server/queue/publish";
 import { brandForAddress } from "@/server/brands";
+import { canSendAs, currentScope } from "@/server/access/scope";
 
 export type LogActionResult = { ok: true; jobId?: string } | { ok: false; error: string };
 
@@ -27,7 +28,7 @@ export async function resendLogEmail(jobId: string): Promise<LogActionResult> {
       campaign: { select: { slug: true, htmlSnapshot: true, customHtml: true, template: { select: { html: true } } } },
     },
   });
-  if (!job) return { ok: false, error: "Email not found." };
+  if (!job || !canSendAs(await currentScope(), job.fromEmail)) return { ok: false, error: "Email not found." };
   if (job.subject === WIPED_SUBJECT) {
     return {
       ok: false,
@@ -93,8 +94,8 @@ export async function resendLogEmail(jobId: string): Promise<LogActionResult> {
  */
 export async function deleteLogEmail(jobId: string): Promise<LogActionResult> {
   const user = await requireRole([Role.ADMIN]);
-  const job = await db.emailJob.findUnique({ where: { id: jobId }, select: { id: true, campaignId: true } });
-  if (!job) return { ok: false, error: "Email not found." };
+  const job = await db.emailJob.findUnique({ where: { id: jobId }, select: { id: true, campaignId: true, fromEmail: true } });
+  if (!job || !canSendAs(await currentScope(), job.fromEmail)) return { ok: false, error: "Email not found." };
   if (job.campaignId) {
     return { ok: false, error: "Campaign emails can't be deleted here — they make up the campaign's results." };
   }

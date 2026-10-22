@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { Role } from "@prisma/client";
 import { getSession, hasRole } from "@/lib/auth/session";
 import { LOG_EVENT_LABEL, parseLogFilters, queryEmailLogs } from "@/server/logs/query";
+import { scopeForUser } from "@/server/access/scope";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export async function GET(req: Request) {
 
   const sp = Object.fromEntries(new URL(req.url).searchParams);
   const f = parseLogFilters(sp);
-  const { rows } = await queryEmailLogs({ ...f, before: undefined }, MAX_ROWS);
+  const { rows } = await queryEmailLogs({ ...f, before: undefined }, MAX_ROWS, await scopeForUser(session.user.id, session.user.role));
 
   const header = ["date_utc", "event", "recipient", "subject", "type", "from", "detail", "job_id"];
   const lines = [header.join(",")];

@@ -9,6 +9,7 @@ import { conversionOverview } from "@/server/conversions/stats";
 import { ensureConversionsFresh, lastConversionRun } from "@/server/conversions/refresh";
 import { ATTRIBUTION_WINDOW_DAYS, KIND_LABELS, describeGoal } from "@/server/conversions/kinds";
 import { AnalyticsTabs } from "../_tabs";
+import { currentScope } from "@/server/access/scope";
 import { RefreshConversionsButton } from "./_controls";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function ConversionsPage({ searchParams }: { searchParams: 
   const days = (PERIODS as readonly number[]).includes(Number(searchParams.days)) ? Number(searchParams.days) : 30;
   // Rebuild when older than 6 hours (or never built); the hourly QStash job usually keeps it fresh.
   await ensureConversionsFresh(360);
-  const [o, run] = await Promise.all([conversionOverview(days), lastConversionRun()]);
+  const [o, run] = await Promise.all([conversionOverview(days, await currentScope()), lastConversionRun()]);
   const canEdit = user.role !== Role.VIEWER;
   const maxKind = o.byKind[0]?.n ?? 1;
 

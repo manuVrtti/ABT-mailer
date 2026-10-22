@@ -1,9 +1,11 @@
 import { CampaignStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth/session";
+import { currentScope, fromEmailWhere } from "@/server/access/scope";
 import { AppShell, type NavCounts } from "@/components/app-shell";
 
 async function getNavCounts(): Promise<NavCounts> {
+  const scoped = fromEmailWhere(await currentScope());
   const [
     campaigns,
     campaignsSending,
@@ -15,10 +17,10 @@ async function getNavCounts(): Promise<NavCounts> {
     eventRules,
     deliveryLogs,
   ] = await Promise.all([
-    db.campaign.count(),
+    db.campaign.count({ where: scoped }),
     db.campaign.count({
       where: {
-        status: { in: [CampaignStatus.SENDING, CampaignStatus.SCHEDULED, CampaignStatus.QUEUED] },
+        AND: [scoped, { status: { in: [CampaignStatus.SENDING, CampaignStatus.SCHEDULED, CampaignStatus.QUEUED] } }],
       },
     }),
     db.marketingContact.count(),

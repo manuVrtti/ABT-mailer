@@ -6,6 +6,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
+import { listBrands } from "@/server/brands";
 
 const createSchema = z.object({
   email: z.string().email(),
@@ -22,16 +23,20 @@ export async function createUser(formData: FormData) {
     role: formData.get("role"),
     password: formData.get("password"),
   });
+  const access = await readSenderAccess(
+    formData.get("allSenders") === "on",
+    formData.getAll("brandKeys").map(String),
+  );
   const hashed = await bcrypt.hash(parsed.password, 12);
   const user = await db.user.create({
-    data: { email: parsed.email, name: parsed.name, role: parsed.role, hashedPassword: hashed },
+    data: { email: parsed.email, name: parsed.name, role: parsed.role, hashedPassword: hashed, ...access },
   });
   await db.auditLog.create({
     data: {
       userId: admin.id,
       action: "user.create",
       resource: `user:${user.id}`,
-      metadata: { email: parsed.email, role: parsed.role },
+      metadata: { email: parsed.email, role: parsed.role, ...access },
       result: "success",
     },
   });
@@ -71,4 +76,29 @@ export async function resetUserPassword(id: string, newPassword: string) {
     data: { userId: admin.id, action: "user.reset_password", resource: `user:${id}`, result: "success" },
   });
   revalidatePath("/settings/users");
+}
+
+/** Validated sender access: every sender, or a list of existing brand keys. */
+async function readSenderAccess(allSenders: boolean, brandKeys: string[]) {
+  if (allSenders) return { allSenders: true, senderBrandKeys: [] as string[] };
+  const known = new Set((await listBrands()).map((b) => b.key));
+  return { allSenders: false, senderBrandKeys: Array.from(new Set(brandKeys.filter((k) => known.has(k)))) };
+}
+
+export async function setUserSenderAccess(
+  id: string,
+  allSenders: boolean,
+  brandKeys: string[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const admin = await requireRole([Role.ADMIN]);
+  const access = await readSenderAccess(allSenders, brandKeys);
+  if (!access.allSenders && access.senderBrandKeys.length === 0) {
+    return { ok: false, error: "Pick at least one sender, or All senders." };
+  }
+  await db.user.update({ where: { id }, data: access });
+  await db.auditLog.create({
+    data: { userId: admin.id, action: "user.set_sender_access", resource: `user:${id}`, metadata: access, result: "success" },
+  });
+  revalidatePath("/settings/users");
+  return { ok: true };
 }

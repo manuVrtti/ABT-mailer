@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { EmailJobStatus, EmailType } from "@prisma/client";
 import { PageHeader, Card } from "@/components/ui";
+import { currentScope, fromEmailWhere } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Transactional analytics" };
@@ -8,9 +9,10 @@ export const metadata = { title: "Transactional analytics" };
 const KEYED_STATUSES: EmailJobStatus[] = ["SENT", "DELIVERED", "BOUNCED", "COMPLAINED", "FAILED", "SKIPPED"];
 
 export default async function TransactionalAnalyticsPage() {
+  const scoped = fromEmailWhere(await currentScope());
   const grouped = await db.emailJob.groupBy({
     by: ["status"],
-    where: { emailType: EmailType.TRANSACTIONAL },
+    where: { AND: [scoped, { emailType: EmailType.TRANSACTIONAL }] },
     _count: { _all: true },
   });
   const counts = new Map<EmailJobStatus, number>(
@@ -20,7 +22,7 @@ export default async function TransactionalAnalyticsPage() {
 
   const byEvent = await db.emailJob.groupBy({
     by: ["eventType"],
-    where: { emailType: EmailType.TRANSACTIONAL, eventType: { not: null } },
+    where: { AND: [scoped, { emailType: EmailType.TRANSACTIONAL, eventType: { not: null } }] },
     _count: { _all: true },
     orderBy: { _count: { eventType: "desc" } },
     take: 10,

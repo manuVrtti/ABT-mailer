@@ -36,9 +36,16 @@ function detectVariables(source: string): string[] {
 export function MarketingTemplateEditor({
   templateId,
   initial,
+  brands = [],
+  canShare = true,
 }: {
   templateId?: string;
+  /** Brands this person may put a template on. */
+  brands?: { key: string; name: string }[];
+  /** May make a template shared by every brand (people with all senders). */
+  canShare?: boolean;
   initial?: {
+    brandKey?: string | null;
     name?: string;
     category?: string;
     subject?: string;
@@ -125,10 +132,25 @@ export function MarketingTemplateEditor({
         <input type="hidden" name="_mode" value={mode} />
 
         <Card className="space-y-4">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div>
               <Label htmlFor="name">Name</Label>
               <Input id="name" name="name" required defaultValue={initial?.name ?? ""} />
+            </div>
+            <div>
+              <Label htmlFor="brandKey">Brand</Label>
+              <Select
+                id="brandKey"
+                name="brandKey"
+                defaultValue={initial?.brandKey ?? (canShare ? "" : brands[0]?.key ?? "")}
+              >
+                {canShare && <option value="">Shared — every brand</option>}
+                {brands.map((b) => (
+                  <option key={b.key} value={b.key}>
+                    {b.name}
+                  </option>
+                ))}
+              </Select>
             </div>
             <div>
               <Label htmlFor="category">Category</Label>

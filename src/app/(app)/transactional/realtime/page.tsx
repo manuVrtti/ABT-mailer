@@ -5,6 +5,7 @@ import { EmailEventType, EmailType } from "@prisma/client";
 import { PageHeader } from "@/components/ui";
 import { Sparkline } from "@/components/sparkline";
 import { AutoRefresh } from "./_auto-refresh";
+import { currentScope, fromEmailWhere } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -33,13 +34,15 @@ export default async function RealtimePage({ searchParams }: { searchParams: { w
   const buckets = win.minutes / win.bucketMin;
   const since = new Date(Date.now() - win.minutes * 60_000);
 
+  const scope = await currentScope();
   const [events, sentJobs] = await Promise.all([
     db.emailEvent.findMany({
-      where: { createdAt: { gte: since } },
+      // Restricted people: only events of email from their brands.
+      where: { createdAt: { gte: since }, ...(scope.all ? {} : { job: fromEmailWhere(scope) }) },
       select: { type: true, createdAt: true },
     }),
     db.emailJob.findMany({
-      where: { sentAt: { gte: since } },
+      where: { AND: [fromEmailWhere(scope), { sentAt: { gte: since } }] },
       select: { sentAt: true, emailType: true },
     }),
   ]);

@@ -15,9 +15,16 @@ import {
   launchDirectSend,
   renderDirectEmail,
 } from "@/server/direct-send/service";
+import { canSendAs, currentScope } from "@/server/access/scope";
 
 const PATH = "/marketing/personal";
 const EDITORS = [Role.ADMIN, Role.MARKETER];
+
+/** Batch actions only work on batches sent from this person's brands. */
+async function hasBatchAccess(id: string): Promise<boolean> {
+  const b = await db.directSend.findUnique({ where: { id }, select: { fromEmail: true } });
+  return Boolean(b) && canSendAs(await currentScope(), b!.fromEmail);
+}
 
 const rowSchema = z.object({
   rowNumber: z.number().int().positive(),
@@ -53,6 +60,9 @@ export async function createDirectSend(json: string): Promise<CreateResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid upload" };
   const input = parsed.data;
 
+  if (!canSendAs(await currentScope(), input.fromEmail)) {
+    return { ok: false, error: `You don't have access to send as ${input.fromEmail}.` };
+  }
   const brand = senderBrand(await listBrands(), input.fromEmail);
   if (!brand) return { ok: false, error: `${input.fromEmail} isn't on a domain verified in SES.` };
 
@@ -116,6 +126,7 @@ export type UploadResult =
 export async function uploadDirectSendAttachment(formData: FormData): Promise<UploadResult> {
   await requireRole(EDITORS);
   const id = String(formData.get("id") ?? "");
+  if (!(await hasBatchAccess(id))) return { ok: false, error: "Batch not found." };
   const file = formData.get("file");
   const forAll = formData.get("forAll") === "1";
   if (!(file instanceof File) || file.size === 0) return { ok: false, error: "Empty file." };
@@ -141,6 +152,7 @@ export async function uploadDirectSendAttachment(formData: FormData): Promise<Up
 
 export async function setAttachmentForAll(id: string, attachmentId: string, forAll: boolean) {
   await requireRole(EDITORS);
+  if (!(await hasBatchAccess(id))) return;
   await db.mailAttachment.updateMany({
     where: { id: attachmentId, directSendId: id, directSend: { status: DirectSendStatus.DRAFT } },
     data: { forAll },
@@ -150,6 +162,7 @@ export async function setAttachmentForAll(id: string, attachmentId: string, forA
 
 export async function deleteDirectSendAttachment(id: string, attachmentId: string) {
   await requireRole(EDITORS);
+  if (!(await hasBatchAccess(id))) return;
   await db.mailAttachment.deleteMany({
     where: { id: attachmentId, directSendId: id, directSend: { status: DirectSendStatus.DRAFT } },
   });
@@ -161,6 +174,7 @@ export type SimpleResult = { ok: true; message: string } | { ok: false; error: s
 /** Send one row's email, with its attachments, to `to` — marked [TEST]. */
 export async function sendDirectSendTest(id: string, rowNumber: number, to: string): Promise<SimpleResult> {
   await requireRole(EDITORS);
+  if (!(await hasBatchAccess(id))) return { ok: false, error: "Batch not found." };
   const address = normalizeEmail(to);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return { ok: false, error: "Enter a valid email." };
   const send = await db.directSend.findUnique({
@@ -192,6 +206,7 @@ export async function sendDirectSendTest(id: string, rowNumber: number, to: stri
 
 export async function launchDirectSendAction(id: string): Promise<SimpleResult> {
   const user = await requireRole(EDITORS);
+  if (!(await hasBatchAccess(id))) return { ok: false, error: "You don't have access to this batch's sender." };
   try {
     const r = await launchDirectSend(id);
     await db.auditLog.create({
@@ -211,6 +226,7 @@ export async function launchDirectSendAction(id: string): Promise<SimpleResult> 
 
 export async function cancelDirectSendAction(id: string): Promise<SimpleResult> {
   const user = await requireRole(EDITORS);
+  if (!(await hasBatchAccess(id))) return { ok: false, error: "You don't have access to this batch's sender." };
   const n = await cancelDirectSend(id);
   await db.auditLog.create({
     data: { userId: user.id, action: "direct_send.cancel", resource: `direct_send:${id}`, metadata: { skipped: n }, result: "success" },
@@ -222,6 +238,7 @@ export async function cancelDirectSendAction(id: string): Promise<SimpleResult> 
 
 export async function deleteDirectSend(id: string): Promise<SimpleResult> {
   const user = await requireRole(EDITORS);
+  if (!(await hasBatchAccess(id))) return { ok: false, error: "You don't have access to this batch's sender." };
   const send = await db.directSend.findUnique({ where: { id }, select: { status: true, name: true } });
   if (!send) return { ok: false, error: "Batch not found." };
   if (send.status === DirectSendStatus.SENDING) return { ok: false, error: "Cancel the batch before deleting it." };

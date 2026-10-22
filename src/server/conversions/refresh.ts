@@ -42,7 +42,7 @@ export async function refreshConversions(): Promise<RefreshResult> {
         sentAt: { gte: horizon },
         OR: [{ campaignId: { not: null } }, { directSendId: { not: null } }],
       },
-      select: { id: true, recipientEmail: true, sentAt: true, campaignId: true, directSendId: true },
+      select: { id: true, recipientEmail: true, sentAt: true, campaignId: true, directSendId: true, fromEmail: true },
     });
     const clicks = new Map<string, Date[]>();
     for (let i = 0; i < jobs.length; i += 5000) {
@@ -59,6 +59,7 @@ export async function refreshConversions(): Promise<RefreshResult> {
       sentAt: j.sentAt!,
       campaignId: j.campaignId,
       directSendId: j.directSendId,
+      fromEmail: j.fromEmail,
       clickTimes: clicks.get(j.id) ?? [],
     }));
 
@@ -71,6 +72,7 @@ export async function refreshConversions(): Promise<RefreshResult> {
       campaignId: c.send.campaignId,
       directSendId: c.send.directSendId,
       emailJobId: c.send.jobId,
+      fromEmail: c.send.fromEmail,
       email: c.action.email,
       kind: c.action.kind,
       ref: c.action.ref,

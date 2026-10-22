@@ -6,6 +6,7 @@ import { requireRole } from "@/lib/auth/session";
 import { Badge, Button, EmptyState, PageHeader, Table, TD, TH, THead, TR } from "@/components/ui";
 import { cn } from "@/lib/utils";
 import { batchSummaries } from "@/server/direct-send/stats";
+import { currentScope, fromEmailWhere } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Personal mails" };
@@ -85,8 +86,11 @@ export default async function DirectSendsPage({
   const page = Math.max(1, Number(searchParams.page) || 1);
 
   // Everything except the status tab, so the tab counts reflect the other filters.
+  // Only batches sent from this person's brands (all, for admins).
+  const scoped = fromEmailWhere(await currentScope());
   const base: Prisma.DirectSendWhereInput = {
     AND: [
+      scoped,
       q
         ? {
             OR: [
@@ -123,7 +127,7 @@ export default async function DirectSendsPage({
       },
     }),
     db.directSend.groupBy({ by: ["status"], where: base, _count: { _all: true } }),
-    db.directSend.findMany({ distinct: ["fromEmail"], select: { fromEmail: true }, orderBy: { fromEmail: "asc" } }),
+    db.directSend.findMany({ where: scoped, distinct: ["fromEmail"], select: { fromEmail: true }, orderBy: { fromEmail: "asc" } }),
   ]);
   const summaries = await batchSummaries(all.map((s) => s.id));
   const sum = (id: string) => summaries.get(id) ?? { sent: 0, opened: 0, clicked: 0, failed: 0 };
@@ -158,7 +162,7 @@ export default async function DirectSendsPage({
       ? statusCounts.reduce((n, c) => n + c._count._all, 0)
       : statusCounts.find((c) => c.status === s)?._count._all ?? 0;
   const filtered = Boolean(q || type !== "all" || from || period !== "any" || status !== "all");
-  const totalBatches = filtered ? await db.directSend.count() : all.length;
+  const totalBatches = filtered ? await db.directSend.count({ where: scoped }) : all.length;
 
   const href = (patch: Record<string, string | number | undefined>) => {
     const p = new URLSearchParams();

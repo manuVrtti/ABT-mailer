@@ -11,6 +11,7 @@ import { fileMatches, fillVariables } from "@/server/direct-send/body";
 import { attachmentsForRow, checkDirectSendReady, renderDirectEmail } from "@/server/direct-send/service";
 import { directSendStats, rowActivity } from "@/server/direct-send/stats";
 import { AttachmentsManager, AutoRefresh, CancelButton, DeleteButton, LaunchButton, TestSend } from "./_controls";
+import { currentScope, requireVisible } from "@/server/access/scope";
 
 export const dynamic = "force-dynamic";
 // Launching creates and queues one job per row.
@@ -56,6 +57,7 @@ export default async function DirectSendPage({
     include: { attachments: { select: { id: true, filename: true, size: true, forAll: true, contentType: true }, orderBy: { filename: "asc" } } },
   });
   if (!send) notFound();
+  requireVisible(await currentScope(), send.fromEmail);
 
   const isDraft = send.status === DirectSendStatus.DRAFT;
   const filter: FilterKey = searchParams.show && searchParams.show in FILTERS ? (searchParams.show as FilterKey) : "all";
