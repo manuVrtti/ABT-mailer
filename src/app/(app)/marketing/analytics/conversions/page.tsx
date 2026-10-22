@@ -11,6 +11,7 @@ import { ATTRIBUTION_WINDOW_DAYS, KIND_LABELS, describeGoal } from "@/server/con
 import { AnalyticsTabs } from "../_tabs";
 import { currentScope } from "@/server/access/scope";
 import { RefreshConversionsButton } from "./_controls";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // A stale cache is rebuilt on first view (reads Klymb, ~10 s).
@@ -31,12 +32,13 @@ const pct = (n: number, of: number) => (of > 0 ? `${((n / of) * 100).toFixed(n /
 const change = (cur: number, prev: number) => (prev > 0 ? (cur - prev) / prev : null);
 
 export default async function ConversionsPage({ searchParams }: { searchParams: { days?: string } }) {
+  await requirePermission("analytics.view");
   const user = await requireUser();
   const days = (PERIODS as readonly number[]).includes(Number(searchParams.days)) ? Number(searchParams.days) : 30;
   // Rebuild when older than 6 hours (or never built); the hourly QStash job usually keeps it fresh.
   await ensureConversionsFresh(360);
   const [o, run] = await Promise.all([conversionOverview(days, await currentScope()), lastConversionRun()]);
-  const canEdit = user.role !== Role.VIEWER;
+  const canEdit = true; // the page itself requires analytics.view, which may refresh
   const maxKind = o.byKind[0]?.n ?? 1;
 
   return (

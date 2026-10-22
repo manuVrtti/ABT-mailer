@@ -12,6 +12,7 @@ import { previewKlymbFilter, type KlymbPreview } from "@/server/klymb/people";
 import { refreshKlymbList, type KlymbSyncStats } from "@/server/klymb/sync";
 import { SUGGEST_FIELDS, suggestKlymbValues, type Suggestion, type SuggestField } from "@/server/klymb/suggest";
 import { CONTACT_LIST_COLORS } from "./_constants";
+import { requirePermission } from "@/server/access/permissions";
 
 const listMetaSchema = z.object({
   name: z.string().min(1, "Give the list a name").max(120),
@@ -49,7 +50,7 @@ export type PreviewResult = { ok: true; preview: KlymbPreview } | { ok: false; e
 
 /** Live count + breakdown for the filter builder. Reads Klymb; writes nothing. */
 export async function previewKlymbListFilter(filterJson: string): Promise<PreviewResult> {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("contacts.manage");
   const parsed = readFilter(filterJson);
   if (!parsed.success) return { ok: false, error: firstIssue(parsed.error) };
   try {
@@ -61,7 +62,7 @@ export async function previewKlymbListFilter(filterJson: string): Promise<Previe
 
 /** Type-ahead values for one filter field. Reads Klymb; writes nothing. */
 export async function suggestKlymbFilterValues(field: string, q: string): Promise<Suggestion[]> {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("contacts.manage");
   if (!(SUGGEST_FIELDS as readonly string[]).includes(field)) return [];
   try {
     return await suggestKlymbValues(field as SuggestField, q);
@@ -73,7 +74,7 @@ export async function suggestKlymbFilterValues(field: string, q: string): Promis
 export type SaveResult = { ok: false; error: string };
 
 export async function createKlymbList(formData: FormData): Promise<SaveResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const meta = readMeta(formData);
   if (!meta.success) return { ok: false, error: firstIssue(meta.error) };
   const filter = readFilter(formData.get("filter"));
@@ -105,7 +106,7 @@ export async function createKlymbList(formData: FormData): Promise<SaveResult> {
 }
 
 export async function updateKlymbList(formData: FormData): Promise<SaveResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const id = String(formData.get("id") ?? "");
   const meta = readMeta(formData);
   if (!meta.success) return { ok: false, error: firstIssue(meta.error) };
@@ -139,7 +140,7 @@ export async function updateKlymbList(formData: FormData): Promise<SaveResult> {
 export type RefreshResult = { ok: true; stats: KlymbSyncStats } | { ok: false; error: string };
 
 export async function refreshKlymbListNow(listId: string): Promise<RefreshResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   try {
     const stats = await refreshKlymbList(listId, { trigger: "manual", userId: user.id });
     revalidateList(listId);
@@ -163,7 +164,7 @@ export async function addKlymbListOverrides(
   rawEmails: string,
   mode: ListOverrideMode,
 ): Promise<OverrideResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const list = await db.contactList.findUnique({ where: { id: listId }, select: { kind: true } });
   if (!list || list.kind !== ContactListKind.KLYMB) return { ok: false, error: "Not a Klymb list." };
 
@@ -195,7 +196,7 @@ export async function addKlymbListOverrides(
 }
 
 export async function removeKlymbListOverride(listId: string, email: string): Promise<RefreshResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   await db.contactListOverride.deleteMany({ where: { listId, email: normalizeEmail(email) } });
   await db.auditLog.create({
     data: { userId: user.id, action: "list.klymb_override_remove", resource: `list:${listId}`, result: "success" },

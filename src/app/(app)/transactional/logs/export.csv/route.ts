@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { Role } from "@prisma/client";
-import { getSession, hasRole } from "@/lib/auth/session";
+import { getSession } from "@/lib/auth/session";
 import { LOG_EVENT_LABEL, parseLogFilters, queryEmailLogs } from "@/server/logs/query";
 import { scopeForUser } from "@/server/access/scope";
+import { hasPermission } from "@/server/access/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ const MAX_ROWS = 10_000;
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!hasRole(session.user.role, [Role.VIEWER])) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!(await hasPermission(session.user.role, "exports"))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const sp = Object.fromEntries(new URL(req.url).searchParams);
   const f = parseLogFilters(sp);

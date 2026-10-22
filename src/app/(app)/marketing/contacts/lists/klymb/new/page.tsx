@@ -6,6 +6,7 @@ import { defaultKlymbFilter } from "@/server/klymb/filter";
 import { ContactsTabs } from "../../../_tabs";
 import { KlymbListForm } from "../_klymb-form";
 import { KlymbUnavailable, loadOptionsOrError } from "../_options";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // Creating the list also loads everyone it matches from Klymb.
@@ -13,7 +14,7 @@ export const maxDuration = 120;
 export const metadata = { title: "New Klymb list" };
 
 export default async function NewKlymbListPage() {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("contacts.manage");
   const res = await loadOptionsOrError();
   return (
     <div>

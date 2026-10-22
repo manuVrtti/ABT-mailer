@@ -8,6 +8,7 @@ import { renderCampaignHtml } from "@/server/campaigns/launcher";
 import { enqueueDelivery } from "@/server/queue/publish";
 import { brandForAddress } from "@/server/brands";
 import { canSendAs, currentScope } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 export type LogActionResult = { ok: true; jobId?: string } | { ok: false; error: string };
 
@@ -21,7 +22,7 @@ const WIPED_SUBJECT = "[redacted after send]";
  * still checked when it is delivered.
  */
 export async function resendLogEmail(jobId: string): Promise<LogActionResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("logs.manage");
   const job = await db.emailJob.findUnique({
     where: { id: jobId },
     include: {

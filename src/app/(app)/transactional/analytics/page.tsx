@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { EmailJobStatus, EmailType } from "@prisma/client";
 import { PageHeader, Card } from "@/components/ui";
 import { currentScope, fromEmailWhere } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Transactional analytics" };
@@ -9,6 +10,7 @@ export const metadata = { title: "Transactional analytics" };
 const KEYED_STATUSES: EmailJobStatus[] = ["SENT", "DELIVERED", "BOUNCED", "COMPLAINED", "FAILED", "SKIPPED"];
 
 export default async function TransactionalAnalyticsPage() {
+  await requirePermission("analytics.view");
   const scoped = fromEmailWhere(await currentScope());
   const grouped = await db.emailJob.groupBy({
     by: ["status"],

@@ -7,11 +7,12 @@ import { requireRole } from "@/lib/auth/session";
 import { refreshConversions } from "@/server/conversions/refresh";
 import { goalSchema, type ConversionKind } from "@/server/conversions/kinds";
 import { loadKlymbFilterOptions } from "@/server/klymb/options";
+import { requirePermission } from "@/server/access/permissions";
 
 export type RefreshActionResult = { ok: true; message: string } | { ok: false; error: string };
 
 export async function refreshConversionsNow(): Promise<RefreshActionResult> {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("analytics.view");
   try {
     const r = await refreshConversions();
     revalidatePath("/marketing/analytics/conversions");
@@ -27,7 +28,7 @@ export type GoalOption = { kind: ConversionKind; ref?: string; label: string; co
 
 /** What a campaign goal can be: any of a kind, or one specific event / cohort. Reads Klymb. */
 export async function loadGoalOptions(): Promise<{ ok: true; options: GoalOption[] } | { ok: false; error: string }> {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("campaigns.manage");
   try {
     const o = await loadKlymbFilterOptions();
     const options: GoalOption[] = [
@@ -52,7 +53,7 @@ export async function loadGoalOptions(): Promise<{ ok: true; options: GoalOption
 }
 
 export async function setCampaignGoal(campaignId: string, rawGoal: unknown): Promise<RefreshActionResult> {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("campaigns.manage");
   let goal: Prisma.InputJsonValue | typeof Prisma.DbNull = Prisma.DbNull;
   if (rawGoal) {
     const parsed = goalSchema.safeParse(rawGoal);

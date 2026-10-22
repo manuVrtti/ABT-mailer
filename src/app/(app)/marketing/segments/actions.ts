@@ -7,9 +7,10 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { ruleTreeSchema, type RuleTree } from "@/server/segments/schema";
 import { computeAudience } from "@/server/segments/compile";
+import { requirePermission } from "@/server/access/permissions";
 
 export async function saveSegment(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const id = String(formData.get("id") ?? "") || undefined;
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || undefined;

@@ -7,6 +7,7 @@ import { Badge, Button, EmptyState, PageHeader, Table, TD, TH, THead, TR } from 
 import { cn } from "@/lib/utils";
 import { batchSummaries } from "@/server/direct-send/stats";
 import { currentScope, fromEmailWhere } from "@/server/access/scope";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Personal mails" };
@@ -181,7 +182,7 @@ export default async function DirectSendsPage({
     return `/marketing/personal${s ? `?${s}` : ""}`;
   };
 
-  const newButton = user.role !== Role.VIEWER && (
+  const newButton = (await currentPermissions()).has("personal.manage") && (
     <Button as="a" href="/marketing/personal/new">
       <Plus className="mr-1 h-4 w-4" /> New personal mails
     </Button>

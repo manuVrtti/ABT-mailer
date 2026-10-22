@@ -8,6 +8,7 @@ import { defaultKlymbFilter, klymbFilterSchema } from "@/server/klymb/filter";
 import { ContactsTabs } from "../../../_tabs";
 import { KlymbListForm } from "../../klymb/_klymb-form";
 import { KlymbUnavailable, loadOptionsOrError } from "../../klymb/_options";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // Saving refreshes the list from Klymb.
@@ -15,7 +16,7 @@ export const maxDuration = 120;
 export const metadata = { title: "Edit Klymb list" };
 
 export default async function EditKlymbFilterPage({ params }: { params: { id: string } }) {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("contacts.manage");
   const list = await db.contactList.findUnique({ where: { id: params.id } });
   if (!list) notFound();
   if (list.kind !== ContactListKind.KLYMB) redirect(`/marketing/contacts/lists/${list.id}`);

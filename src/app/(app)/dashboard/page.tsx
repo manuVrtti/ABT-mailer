@@ -19,6 +19,7 @@ import { Sparkline } from "@/components/sparkline";
 import { cn } from "@/lib/utils";
 import { conversionTotals } from "@/server/conversions/stats";
 import { currentScope, fromEmailSql, fromEmailWhere, type SenderScope } from "@/server/access/scope";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dashboard" };
@@ -179,7 +180,9 @@ export default async function DashboardPage() {
   const firstName = (user.name ?? user.email ?? "there").split(/\s+|@/)[0] ?? "there";
   const hour = Number(new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", hour12: false }).format(new Date()));
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
-  const canCreate = user.role !== Role.VIEWER;
+  const perms = await currentPermissions();
+  const canCreate = perms.has("campaigns.manage");
+  const canPersonal = perms.has("personal.manage");
   const shortDate = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short" });
 
   return (
@@ -194,9 +197,11 @@ export default async function DashboardPage() {
         </div>
         {canCreate && (
           <div className="flex gap-2">
-            <Button as="a" href="/marketing/personal/new" variant="secondary">
-              <Send className="h-4 w-4" /> Personal mails
-            </Button>
+            {canPersonal && (
+              <Button as="a" href="/marketing/personal/new" variant="secondary">
+                <Send className="h-4 w-4" /> Personal mails
+              </Button>
+            )}
             <Button as="a" href="/marketing/campaigns/new">
               <Megaphone className="h-4 w-4" /> New campaign
             </Button>

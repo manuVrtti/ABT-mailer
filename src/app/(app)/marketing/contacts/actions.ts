@@ -8,11 +8,12 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { importCsv } from "@/server/import/csv";
 import { logger } from "@/lib/logger";
+import { requirePermission } from "@/server/access/permissions";
 
 const MAX_CSV_BYTES = 20 * 1024 * 1024; // 20 MB
 
 export async function startCsvImport(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const file = formData.get("file");
   if (!(file instanceof File)) throw new Error("No file uploaded");
   if (file.size === 0) throw new Error("File is empty");
@@ -65,7 +66,7 @@ const singleSchema = z.object({
 });
 
 export async function createContactManually(formData: FormData) {
-  const user = await requireRole([Role.ADMIN, Role.MARKETER]);
+  const user = await requirePermission("contacts.manage");
   const parsed = singleSchema.parse({
     email: formData.get("email"),
     firstName: formData.get("firstName") || undefined,

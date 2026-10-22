@@ -4,10 +4,12 @@ import { ContactsTabs } from "../../_tabs";
 import { createList } from "../actions";
 import { CONTACT_LIST_COLORS } from "../_constants";
 import { ColorPicker } from "./_color-picker";
+import { requirePermission } from "@/server/access/permissions";
 
 export const metadata = { title: "New contact list" };
 
-export default function NewContactListPage() {
+export default async function NewContactListPage() {
+  await requirePermission("contacts.manage");
   return (
     <div>
       <ContactsTabs />

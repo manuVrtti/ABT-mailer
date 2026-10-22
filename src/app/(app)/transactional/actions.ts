@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
 import { extractVariables } from "@/server/email/render";
 import { EmailService } from "@/server/email";
+import { requirePermission } from "@/server/access/permissions";
 
 const templateSchema = z.object({
   templateKey: z.string().min(1).max(64).regex(/^[a-z][a-z0-9_]*$/, "lowercase snake_case only"),
@@ -24,7 +25,7 @@ const templateSchema = z.object({
  * once created — safer for audit than in-place edits.
  */
 export async function saveTransactionalTemplate(formData: FormData) {
-  const user = await requireRole([Role.ADMIN]);
+  const user = await requirePermission("transactional.manage");
   const parsed = templateSchema.parse({
     templateKey: formData.get("templateKey"),
     name: formData.get("name"),
@@ -84,7 +85,7 @@ export async function saveTransactionalTemplate(formData: FormData) {
 }
 
 export async function activateTransactionalVersion(templateKey: string, version: number) {
-  const user = await requireRole([Role.ADMIN]);
+  const user = await requirePermission("transactional.manage");
   await db.$transaction([
     db.transactionalTemplate.updateMany({ where: { templateKey, isActive: true }, data: { isActive: false } }),
     db.transactionalTemplate.update({ where: { templateKey_version: { templateKey, version } }, data: { isActive: true } }),
@@ -101,7 +102,7 @@ export async function activateTransactionalVersion(templateKey: string, version:
 }
 
 export async function sendTestTransactional(formData: FormData) {
-  await requireRole([Role.ADMIN]);
+  await requirePermission("transactional.manage");
   const to = String(formData.get("to") ?? "");
   const templateKey = String(formData.get("templateKey") ?? "");
   const varsRaw = String(formData.get("variables") ?? "{}");
@@ -141,7 +142,7 @@ const ruleSchema = z.object({
 });
 
 export async function saveEventRule(formData: FormData) {
-  const user = await requireRole([Role.ADMIN]);
+  const user = await requirePermission("transactional.manage");
   const parsed = ruleSchema.parse({
     eventType: formData.get("eventType"),
     templateKey: formData.get("templateKey"),
@@ -186,7 +187,7 @@ export async function saveEventRule(formData: FormData) {
 }
 
 export async function toggleEventRule(eventType: string, isActive: boolean) {
-  const user = await requireRole([Role.ADMIN]);
+  const user = await requirePermission("transactional.manage");
   await db.emailEventRule.update({ where: { eventType }, data: { isActive } });
   await db.auditLog.create({
     data: {

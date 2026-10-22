@@ -5,13 +5,14 @@ import { requireRole } from "@/lib/auth/session";
 import { sendableDefault } from "@/server/brands";
 import { currentScope, sendableSenders } from "@/server/access/scope";
 import { NewDirectSendForm } from "./_new-form";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 export const metadata = { title: "New personal mails" };
 
 export default async function NewDirectSendPage() {
-  await requireRole([Role.ADMIN, Role.MARKETER]);
+  await requirePermission("personal.manage");
   // Only the brands this person may send as (all, for admins).
   const scope = await currentScope();
   const senders = sendableSenders(scope);

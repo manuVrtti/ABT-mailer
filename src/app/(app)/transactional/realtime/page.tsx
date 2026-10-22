@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui";
 import { Sparkline } from "@/components/sparkline";
 import { AutoRefresh } from "./_auto-refresh";
 import { currentScope, fromEmailWhere } from "@/server/access/scope";
+import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -29,6 +30,7 @@ function bucketize(times: Date[], since: Date, bucketMin: number, buckets: numbe
 }
 
 export default async function RealtimePage({ searchParams }: { searchParams: { window?: string } }) {
+  await requirePermission("logs.view");
   const key: WindowKey = searchParams.window && searchParams.window in WINDOWS ? (searchParams.window as WindowKey) : "30m";
   const win = WINDOWS[key];
   const buckets = win.minutes / win.bucketMin;

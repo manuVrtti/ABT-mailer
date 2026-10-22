@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getSession, hasRole } from "@/lib/auth/session";
+import { getSession } from "@/lib/auth/session";
 import { rowActivity } from "@/server/direct-send/stats";
 import { canSendAs, scopeForUser } from "@/server/access/scope";
+import { hasPermission } from "@/server/access/permissions";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ export const maxDuration = 60;
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!hasRole(session.user.role, [Role.VIEWER])) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!(await hasPermission(session.user.role, "exports"))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
   const send = await db.directSend.findUnique({ where: { id: params.id }, select: { name: true, fromEmail: true } });
   if (!send || !canSendAs(await scopeForUser(session.user.id, session.user.role), send.fromEmail)) {
