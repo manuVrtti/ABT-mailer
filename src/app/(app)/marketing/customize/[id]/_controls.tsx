@@ -48,12 +48,32 @@ export function TestSend({ id, rowNumber, defaultTo }: { id: string; rowNumber: 
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send test"}
         </Button>
       </div>
-      {msg && <p className={`mt-1 text-xs ${msg.ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"}`}>{msg.text}</p>}
+      {msg && (
+        <p
+          className={`mt-1 text-xs ${msg.ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"}`}
+        >
+          {msg.text}
+        </p>
+      )}
     </div>
   );
 }
 
-export function LaunchButton({ id, count, disabled }: { id: string; count: number; disabled?: boolean }) {
+export function LaunchButton({
+  id,
+  count,
+  disabled,
+  label,
+  confirmTitle,
+  confirmMessage,
+}: {
+  id: string;
+  count: number;
+  disabled?: boolean;
+  label?: string;
+  confirmTitle?: string;
+  confirmMessage?: string;
+}) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -64,8 +84,10 @@ export function LaunchButton({ id, count, disabled }: { id: string; count: numbe
         disabled={pending || disabled}
         onClick={async () => {
           const ok = await confirmDialog({
-            title: `Send ${count.toLocaleString()} personal email${count === 1 ? "" : "s"} now?`,
-            message: "Each person gets their own row's email and files. This can't be undone.",
+            title:
+              confirmTitle ?? `Send ${count.toLocaleString()} personal email${count === 1 ? "" : "s"} now?`,
+            message:
+              confirmMessage ?? "Each person gets their own row's email and files. This can't be undone.",
             confirmLabel: "Send now",
           });
           if (!ok) return;
@@ -77,9 +99,13 @@ export function LaunchButton({ id, count, disabled }: { id: string; count: numbe
         }}
       >
         {pending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Send className="mr-1 h-4 w-4" />}
-        {pending ? "Queuing…" : `Send ${count.toLocaleString()} emails`}
+        {pending ? "Queuing…" : (label ?? `Send ${count.toLocaleString()} emails`)}
       </Button>
-      {msg && <span className={`text-xs ${msg.ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"}`}>{msg.text}</span>}
+      {msg && (
+        <span className={`text-xs ${msg.ok ? "text-emerald-700 dark:text-emerald-300" : "text-destructive"}`}>
+          {msg.text}
+        </span>
+      )}
     </div>
   );
 }
@@ -133,7 +159,7 @@ export function DeleteButton({ id, name }: { id: string; name: string }) {
           const r = await deleteDirectSend(id);
           if (r.ok) {
             toast.success("Batch deleted");
-            router.push("/marketing/personal");
+            router.push("/marketing/customize");
           } else toast.error("Couldn't delete", r.error);
         });
       }}
@@ -181,7 +207,9 @@ export function AttachmentsManager({
 
   return (
     <div className="space-y-2">
-      {attachments.length === 0 && missing.length === 0 && <p className="text-sm text-muted-foreground">No attachments.</p>}
+      {attachments.length === 0 && missing.length === 0 && (
+        <p className="text-sm text-muted-foreground">No attachments.</p>
+      )}
       <ul className="divide-y divide-border rounded-xl border border-border/70 empty:hidden">
         {attachments.map((a) => (
           <li key={a.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-sm">
@@ -226,7 +254,10 @@ export function AttachmentsManager({
           </li>
         ))}
         {missing.map((m) => (
-          <li key={m.name} className="flex items-center gap-3 bg-red-50/60 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200">
+          <li
+            key={m.name}
+            className="flex items-center gap-3 bg-red-50/60 px-3 py-2 text-sm text-red-800 dark:bg-red-950/30 dark:text-red-200"
+          >
             <Paperclip className="h-4 w-4" />
             <span className="flex-1 truncate">{m.name}</span>
             <span className="text-xs">needed by {m.rows} row(s) — upload it</span>
@@ -235,10 +266,18 @@ export function AttachmentsManager({
       </ul>
       {editable && (
         <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="secondary" disabled={pending} onClick={() => input.current?.click()}>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => input.current?.click()}
+          >
             <Upload className="mr-1 h-3.5 w-3.5" /> Upload files
           </Button>
-          <span className="text-xs text-muted-foreground">Max 4 MB each. A file with the same name replaces the old one.</span>
+          <span className="text-xs text-muted-foreground">
+            Max 4 MB each. A file with the same name replaces the old one.
+          </span>
           <input
             ref={input}
             type="file"

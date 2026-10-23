@@ -69,7 +69,7 @@ const SECTIONS: NavSection[] = [
         live: "campaignsSending",
         needs: "campaigns.manage",
       },
-      { href: "/marketing/personal", label: "Personal mails", icon: Send, needs: "personal.manage" },
+      { href: "/marketing/customize", label: "Customize mail", icon: Send, needs: "personal.manage" },
       { href: "/marketing/contacts", label: "Contacts", icon: Users, needs: "contacts.manage" },
       { href: "/marketing/segments", label: "Segments", icon: Filter, needs: "contacts.manage" },
       { href: "/marketing/templates", label: "Templates", icon: FileText, needs: "templates.manage" },
@@ -92,7 +92,8 @@ const KLYMB_NEW = "/marketing/contacts/lists/klymb/new";
 
 const CREATE: { label: string; href: string; icon: LucideIcon; needs: Permission }[] = [
   { label: "Campaign", href: "/marketing/campaigns/new", icon: Megaphone, needs: "campaigns.manage" },
-  { label: "Personal mails", href: "/marketing/personal/new", icon: Send, needs: "personal.manage" },
+  { label: "Bulk mail (CSV)", href: "/marketing/customize/new", icon: Send, needs: "personal.manage" },
+  { label: "Single email", href: "/marketing/customize/single", icon: Mail, needs: "personal.manage" },
   {
     label: "Klymb list",
     href: "/marketing/contacts/lists/klymb/new",
@@ -156,7 +157,8 @@ const CRUMB: Record<string, string | null> = {
   marketing: null,
   transactional: null,
   campaigns: "Campaigns",
-  personal: "Personal mails",
+  customize: "Customize mail",
+  single: "Single email",
   contacts: "Contacts",
   lists: "Lists",
   klymb: "Klymb list",

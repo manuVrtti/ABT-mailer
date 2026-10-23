@@ -378,6 +378,9 @@ export const EmailService = {
       const attachments = await loadJobAttachments(job.attachmentIds);
       const result = await provider.send({
         to: job.recipientEmail,
+        alsoTo: job.extraTo.length ? job.extraTo : undefined,
+        cc: job.cc.length ? job.cc : undefined,
+        bcc: job.bcc.length ? job.bcc : undefined,
         from: { email: job.fromEmail, name: job.fromName },
         replyTo: job.replyTo ?? undefined,
         subject: job.subject,

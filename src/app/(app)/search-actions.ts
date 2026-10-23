@@ -48,7 +48,7 @@ export async function globalSearch(raw: string): Promise<SearchHit[]> {
       kind: "personal" as const,
       title: p.name,
       subtitle: `${p.status.toLowerCase()} · ${p.totalRows} emails`,
-      href: `/marketing/personal/${p.id}`,
+      href: `/marketing/customize/${p.id}`,
     })),
     ...lists.map((l) => ({
       kind: "list" as const,

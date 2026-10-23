@@ -146,12 +146,12 @@ export default async function ConversionsPage({ searchParams }: { searchParams: 
                     <TR key={`${s.kind}:${s.id}`}>
                       <TD className="max-w-[280px]">
                         <Link
-                          href={s.kind === "campaign" ? `/marketing/campaigns/${s.id}` : `/marketing/personal/${s.id}`}
+                          href={s.kind === "campaign" ? `/marketing/campaigns/${s.id}` : `/marketing/customize/${s.id}`}
                           className="block truncate font-medium hover:underline"
                         >
                           {s.name}
                         </Link>
-                        <span className="text-2xs text-muted-foreground">{s.kind === "campaign" ? "Campaign" : "Personal mails"}</span>
+                        <span className="text-2xs text-muted-foreground">{s.kind === "campaign" ? "Campaign" : "Customize mail"}</span>
                       </TD>
                       <TD className="text-right tabular">{s.recipients.toLocaleString()}</TD>
                       <TD className="text-right tabular font-medium">{s.conversions.toLocaleString()}</TD>

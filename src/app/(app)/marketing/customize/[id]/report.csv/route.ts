@@ -13,9 +13,13 @@ export const maxDuration = 60;
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const session = await getSession();
   if (!session?.user) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  if (!(await hasPermission(session.user.role, "exports"))) return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  if (!(await hasPermission(session.user.role, "exports")))
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
 
-  const send = await db.directSend.findUnique({ where: { id: params.id }, select: { name: true, fromEmail: true } });
+  const send = await db.directSend.findUnique({
+    where: { id: params.id },
+    select: { name: true, fromEmail: true },
+  });
   if (!send || !canSendAs(await scopeForUser(session.user.id, session.user.role), send.fromEmail)) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -23,11 +27,34 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
   const rows = await db.directSendRow.findMany({
     where: { directSendId: params.id },
     orderBy: { rowNumber: "asc" },
-    select: { rowNumber: true, email: true, name: true, subject: true, attachmentNames: true, emailJobId: true },
+    select: {
+      rowNumber: true,
+      email: true,
+      name: true,
+      subject: true,
+      attachmentNames: true,
+      emailJobId: true,
+    },
   });
   const activity = await rowActivity(rows.map((r) => r.emailJobId).filter((x): x is string => Boolean(x)));
 
-  const header = ["row", "email", "name", "subject", "attachments", "status", "sent_at", "delivered_at", "opened", "opens", "first_opened_at", "clicked", "clicks", "first_clicked_at", "error"];
+  const header = [
+    "row",
+    "email",
+    "name",
+    "subject",
+    "attachments",
+    "status",
+    "sent_at",
+    "delivered_at",
+    "opened",
+    "opens",
+    "first_opened_at",
+    "clicked",
+    "clicks",
+    "first_clicked_at",
+    "error",
+  ];
   const lines = [header.join(",")];
   for (const r of rows) {
     const a = r.emailJobId ? activity.get(r.emailJobId) : undefined;
@@ -54,7 +81,11 @@ export async function GET(_req: Request, { params }: { params: { id: string } })
     );
   }
 
-  const slug = send.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "personal-mails";
+  const slug =
+    send.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)/g, "") || "personal-mails";
   return new NextResponse(lines.join("\n"), {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",

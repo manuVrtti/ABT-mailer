@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     default: "Mailer",
     template: "%s · Mailer",
   },
-  description: "Email campaigns, personal mails and transactional email for ABTalks and Klymb.",
+  description: "Email campaigns, customized mails and transactional email for ABTalks and Klymb.",
   robots: { index: false, follow: false },
 };
 

@@ -16,7 +16,7 @@
 
 export const PERMISSIONS = [
   { key: "campaigns.manage", label: "Campaigns", hint: "See campaigns and their reports. Marketers can also create, edit and send them." },
-  { key: "personal.manage", label: "Personal mails", hint: "See personal-mail batches. Marketers can also upload and send them." },
+  { key: "personal.manage", label: "Customize mail", hint: "See bulk CSV mails and single emails. Marketers can also write and send them." },
   { key: "contacts.manage", label: "Contacts, lists & segments", hint: "See contacts, lists and segments. Marketers can also import and edit them." },
   { key: "templates.manage", label: "Templates", hint: "See marketing templates. Marketers can also create and edit them." },
   { key: "transactional.manage", label: "Transactional templates & events", hint: "See transactional templates and event rules. Marketers can also edit them." },

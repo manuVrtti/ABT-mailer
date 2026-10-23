@@ -30,7 +30,7 @@ const HIT_ICON: Record<SearchHit["kind"], LucideIcon> = {
 };
 const HIT_GROUP: Record<SearchHit["kind"], string> = {
   campaign: "Campaigns",
-  personal: "Personal mails",
+  personal: "Customize mail",
   list: "Lists",
   template: "Templates",
   segment: "Segments",

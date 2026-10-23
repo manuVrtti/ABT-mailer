@@ -10,7 +10,15 @@ import { brandForAddress } from "@/server/brands";
 import { fileMatches, fillVariables } from "@/server/direct-send/body";
 import { attachmentsForRow, checkDirectSendReady, renderDirectEmail } from "@/server/direct-send/service";
 import { directSendStats, rowActivity } from "@/server/direct-send/stats";
-import { AttachmentsManager, AutoRefresh, CancelButton, DeleteButton, LaunchButton, TestSend } from "./_controls";
+import { SingleMailView } from "./_single-view";
+import {
+  AttachmentsManager,
+  AutoRefresh,
+  CancelButton,
+  DeleteButton,
+  LaunchButton,
+  TestSend,
+} from "./_controls";
 import { currentScope, requireVisible } from "@/server/access/scope";
 import { currentPermissions } from "@/server/access/permissions";
 import { requireAccess } from "@/server/access/permissions";
@@ -57,13 +65,20 @@ export default async function DirectSendPage({
   const canEdit = (await currentPermissions()).has("personal.manage");
   const send = await db.directSend.findUnique({
     where: { id: params.id },
-    include: { attachments: { select: { id: true, filename: true, size: true, forAll: true, contentType: true }, orderBy: { filename: "asc" } } },
+    include: {
+      attachments: {
+        select: { id: true, filename: true, size: true, forAll: true, contentType: true },
+        orderBy: { filename: "asc" },
+      },
+    },
   });
   if (!send) notFound();
   requireVisible(await currentScope(), send.fromEmail);
+  if (send.single) return <SingleMailView send={send} canEdit={canEdit} me={user.email ?? ""} />;
 
   const isDraft = send.status === DirectSendStatus.DRAFT;
-  const filter: FilterKey = searchParams.show && searchParams.show in FILTERS ? (searchParams.show as FilterKey) : "all";
+  const filter: FilterKey =
+    searchParams.show && searchParams.show in FILTERS ? (searchParams.show as FilterKey) : "all";
   const page = Math.max(1, Number(searchParams.page) || 1);
 
   // Rows for this page, narrowed by the engagement filter.
@@ -76,10 +91,21 @@ export default async function DirectSendPage({
   let rowWhere: Prisma.DirectSendRowWhereInput = { directSendId: send.id };
   if (filter === "opened") rowWhere = { ...rowWhere, emailJobId: { in: await jobIdsWith("OPEN") } };
   if (filter === "clicked") rowWhere = { ...rowWhere, emailJobId: { in: await jobIdsWith("CLICK") } };
-  if (filter === "not_opened") rowWhere = { ...rowWhere, emailJobId: { not: null, notIn: await jobIdsWith("OPEN") } };
+  if (filter === "not_opened")
+    rowWhere = { ...rowWhere, emailJobId: { not: null, notIn: await jobIdsWith("OPEN") } };
   if (filter === "problems") {
     const bad = await db.emailJob.findMany({
-      where: { directSendId: send.id, status: { in: [EmailJobStatus.BOUNCED, EmailJobStatus.FAILED, EmailJobStatus.COMPLAINED, EmailJobStatus.SKIPPED] } },
+      where: {
+        directSendId: send.id,
+        status: {
+          in: [
+            EmailJobStatus.BOUNCED,
+            EmailJobStatus.FAILED,
+            EmailJobStatus.COMPLAINED,
+            EmailJobStatus.SKIPPED,
+          ],
+        },
+      },
       select: { id: true },
     });
     rowWhere = { ...rowWhere, emailJobId: { in: bad.map((b) => b.id) } };
@@ -93,7 +119,15 @@ export default async function DirectSendPage({
       orderBy: { rowNumber: "asc" },
       skip: (page - 1) * PAGE_SIZE,
       take: PAGE_SIZE,
-      select: { rowNumber: true, email: true, name: true, subject: true, variables: true, attachmentNames: true, emailJobId: true },
+      select: {
+        rowNumber: true,
+        email: true,
+        name: true,
+        subject: true,
+        variables: true,
+        attachmentNames: true,
+        emailJobId: true,
+      },
     }),
     isDraft ? checkDirectSendReady(send.id) : Promise.resolve([]),
     db.directSendRow.findMany({ where: { directSendId: send.id }, select: { attachmentNames: true } }),
@@ -124,7 +158,12 @@ export default async function DirectSendPage({
   const done = stats.sent + stats.failed + stats.skipped;
   const qs = (patch: Record<string, string | number | undefined>) => {
     const p = new URLSearchParams();
-    const merged = { row: searchParams.row, show: filter === "all" ? undefined : filter, page: page > 1 ? page : undefined, ...patch };
+    const merged = {
+      row: searchParams.row,
+      show: filter === "all" ? undefined : filter,
+      page: page > 1 ? page : undefined,
+      ...patch,
+    };
     for (const [k, v] of Object.entries(merged)) if (v !== undefined && v !== "") p.set(k, String(v));
     const s = p.toString();
     return s ? `?${s}` : "";
@@ -138,7 +177,7 @@ export default async function DirectSendPage({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <Link
-            href="/marketing/personal"
+            href="/marketing/customize"
             className="grid h-9 w-9 place-items-center rounded-full border border-border/60 bg-white text-muted-foreground hover:text-foreground dark:bg-slate-900"
             aria-label="Back"
           >
@@ -162,7 +201,7 @@ export default async function DirectSendPage({
             {send.status !== DirectSendStatus.SENDING && <DeleteButton id={send.id} name={send.name} />}
             {!isDraft && (
               <a
-                href={`/marketing/personal/${send.id}/report.csv`}
+                href={`/marketing/customize/${send.id}/report.csv`}
                 className="inline-flex items-center rounded-md border border-border bg-white px-4 py-2 text-sm font-medium hover:bg-slate-50 dark:bg-slate-900"
               >
                 <Download className="mr-1 h-4 w-4" /> Report CSV
@@ -179,29 +218,64 @@ export default async function DirectSendPage({
           {send.status === DirectSendStatus.SENDING && (
             <div>
               <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-                <span>Sending… {done.toLocaleString()} of {send.totalRows.toLocaleString()} processed</span>
+                <span>
+                  Sending… {done.toLocaleString()} of {send.totalRows.toLocaleString()} processed
+                </span>
                 <span>{pct(done, send.totalRows)}</span>
               </div>
               <div className="h-2 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                <div className="h-2 bg-gradient-to-r from-emerald-500 to-teal-600 transition-all" style={{ width: pct(done, send.totalRows) === "—" ? "0%" : pct(done, send.totalRows) }} />
+                <div
+                  className="h-2 bg-gradient-to-r from-emerald-500 to-teal-600 transition-all"
+                  style={{ width: pct(done, send.totalRows) === "—" ? "0%" : pct(done, send.totalRows) }}
+                />
               </div>
             </div>
           )}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
             <Stat label="Emails" value={stats.total} />
             <Stat label="Sent" value={stats.sent} sub={pct(stats.sent, stats.total)} />
-            <Stat label="Delivered" value={stats.delivered} sub={`${pct(stats.delivered, stats.sent)} of sent`} tone="success" />
-            <Stat label="Opened" value={stats.opened} sub={`${pct(stats.opened, stats.delivered)} of delivered`} tone="info" icon={Eye} />
-            <Stat label="Clicked" value={stats.clicked} sub={`${pct(stats.clicked, stats.delivered)} of delivered`} tone="info" icon={MousePointerClick} />
-            <Stat label="Bounced" value={stats.bounced} sub={pct(stats.bounced, stats.sent)} tone={stats.bounced ? "danger" : undefined} />
+            <Stat
+              label="Delivered"
+              value={stats.delivered}
+              sub={`${pct(stats.delivered, stats.sent)} of sent`}
+              tone="success"
+            />
+            <Stat
+              label="Opened"
+              value={stats.opened}
+              sub={`${pct(stats.opened, stats.delivered)} of delivered`}
+              tone="info"
+              icon={Eye}
+            />
+            <Stat
+              label="Clicked"
+              value={stats.clicked}
+              sub={`${pct(stats.clicked, stats.delivered)} of delivered`}
+              tone="info"
+              icon={MousePointerClick}
+            />
+            <Stat
+              label="Bounced"
+              value={stats.bounced}
+              sub={pct(stats.bounced, stats.sent)}
+              tone={stats.bounced ? "danger" : undefined}
+            />
             <Stat label="Failed" value={stats.failed} tone={stats.failed ? "danger" : undefined} />
-            <Stat label="Skipped" value={stats.skipped} sub={stats.queued ? `${stats.queued} still queued` : undefined} />
+            <Stat
+              label="Skipped"
+              value={stats.skipped}
+              sub={stats.queued ? `${stats.queued} still queued` : undefined}
+            />
           </div>
           <p className="text-xs text-muted-foreground">
-            Opens are counted when the recipient&apos;s email app loads images, so the real open rate is usually a bit higher.
-            Spam complaints: {stats.complained}.{" "}
-            <Link href="/marketing/analytics/conversions" className="text-brand-700 hover:underline dark:text-brand-300">
-              {converted.toLocaleString()} {converted === 1 ? "person" : "people"} acted in Klymb within a week
+            Opens are counted when the recipient&apos;s email app loads images, so the real open rate is
+            usually a bit higher. Spam complaints: {stats.complained}.{" "}
+            <Link
+              href="/marketing/analytics/conversions"
+              className="text-brand-700 hover:underline dark:text-brand-300"
+            >
+              {converted.toLocaleString()} {converted === 1 ? "person" : "people"} acted in Klymb within a
+              week
             </Link>
             .
           </p>
@@ -215,10 +289,14 @@ export default async function DirectSendPage({
             <div className="flex gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200">
               <AlertTriangle className="h-4 w-4 shrink-0" />
               <div>
-                <b>Fix {problems.length} problem{problems.length === 1 ? "" : "s"} before sending:</b>
+                <b>
+                  Fix {problems.length} problem{problems.length === 1 ? "" : "s"} before sending:
+                </b>
                 <ul className="mt-1 list-disc pl-5">
                   {problems.slice(0, 8).map((p, i) => (
-                    <li key={i}>{p.rowNumber ? `Row ${p.rowNumber} (${p.email}): ${p.problem}` : p.problem}</li>
+                    <li key={i}>
+                      {p.rowNumber ? `Row ${p.rowNumber} (${p.email}): ${p.problem}` : p.problem}
+                    </li>
                   ))}
                   {problems.length > 8 && <li>…and {problems.length - 8} more</li>}
                 </ul>
@@ -226,7 +304,8 @@ export default async function DirectSendPage({
             </div>
           ) : (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-200">
-              Everything checks out. Send yourself a test, then click <b>Send {send.totalRows.toLocaleString()} emails</b>.
+              Everything checks out. Send yourself a test, then click{" "}
+              <b>Send {send.totalRows.toLocaleString()} emails</b>.
             </div>
           )}
         </>
@@ -240,10 +319,12 @@ export default async function DirectSendPage({
               (Object.keys(FILTERS) as FilterKey[]).map((k) => (
                 <Link
                   key={k}
-                  href={`/marketing/personal/${send.id}${qs({ show: k === "all" ? undefined : k, page: undefined })}`}
+                  href={`/marketing/customize/${send.id}${qs({ show: k === "all" ? undefined : k, page: undefined })}`}
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs",
-                    filter === k ? "border-emerald-500 bg-emerald-50 font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200" : "border-border text-muted-foreground hover:bg-slate-50 dark:hover:bg-slate-800",
+                    filter === k
+                      ? "border-emerald-500 bg-emerald-50 font-medium text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200"
+                      : "border-border text-muted-foreground hover:bg-slate-50 dark:hover:bg-slate-800",
                   )}
                 >
                   {FILTERS[k]}
@@ -269,20 +350,34 @@ export default async function DirectSendPage({
                 {rows.map((r) => {
                   const a = r.emailJobId ? activity.get(r.emailJobId) : undefined;
                   return (
-                    <tr key={r.rowNumber} className={cn("border-t border-border", previewRow?.rowNumber === r.rowNumber && "bg-emerald-50/60 dark:bg-emerald-950/20")}>
+                    <tr
+                      key={r.rowNumber}
+                      className={cn(
+                        "border-t border-border",
+                        previewRow?.rowNumber === r.rowNumber && "bg-emerald-50/60 dark:bg-emerald-950/20",
+                      )}
+                    >
                       <td className="px-3 py-2 text-xs text-muted-foreground">
-                        <Link href={`/marketing/personal/${send.id}${qs({ row: r.rowNumber })}`} className="hover:underline">
+                        <Link
+                          href={`/marketing/customize/${send.id}${qs({ row: r.rowNumber })}`}
+                          className="hover:underline"
+                        >
                           {r.rowNumber}
                         </Link>
                       </td>
                       <td className="max-w-[220px] px-3 py-2">
-                        <Link href={`/marketing/personal/${send.id}${qs({ row: r.rowNumber })}`} className="block hover:underline">
+                        <Link
+                          href={`/marketing/customize/${send.id}${qs({ row: r.rowNumber })}`}
+                          className="block hover:underline"
+                        >
                           <div className="truncate font-medium">{r.name || r.email}</div>
                           {r.name && <div className="truncate text-xs text-muted-foreground">{r.email}</div>}
                         </Link>
                       </td>
                       <td className="max-w-[240px] px-3 py-2">
-                        <div className="truncate">{fillVariables(r.subject, (r.variables ?? {}) as Record<string, string>, false)}</div>
+                        <div className="truncate">
+                          {fillVariables(r.subject, (r.variables ?? {}) as Record<string, string>, false)}
+                        </div>
                         {r.attachmentNames.length > 0 && (
                           <div className="flex items-center gap-1 text-xs text-muted-foreground">
                             <Paperclip className="h-3 w-3" /> {r.attachmentNames.length}
@@ -295,7 +390,10 @@ export default async function DirectSendPage({
                       {!isDraft && (
                         <td className="px-3 py-2 text-xs">
                           {a?.openedAt ? (
-                            <span className="text-sky-700 dark:text-sky-300" title={`First opened ${fmt(a.openedAt)} UTC`}>
+                            <span
+                              className="text-sky-700 dark:text-sky-300"
+                              title={`First opened ${fmt(a.openedAt)} UTC`}
+                            >
                               ✓ {a.openCount > 1 ? `${a.openCount}×` : ""}
                             </span>
                           ) : (
@@ -306,7 +404,10 @@ export default async function DirectSendPage({
                       {!isDraft && (
                         <td className="px-3 py-2 text-xs">
                           {a?.clickedAt ? (
-                            <span className="text-violet-700 dark:text-violet-300" title={`First clicked ${fmt(a.clickedAt)} UTC`}>
+                            <span
+                              className="text-violet-700 dark:text-violet-300"
+                              title={`First clicked ${fmt(a.clickedAt)} UTC`}
+                            >
                               ✓ {a.clickCount > 1 ? `${a.clickCount}×` : ""}
                             </span>
                           ) : (
@@ -330,7 +431,10 @@ export default async function DirectSendPage({
           {pages > 1 && (
             <div className="mt-2 flex items-center justify-end gap-2 text-xs">
               {page > 1 && (
-                <Link href={`/marketing/personal/${send.id}${qs({ page: page - 1 })}`} className="rounded border border-border px-2 py-1">
+                <Link
+                  href={`/marketing/customize/${send.id}${qs({ page: page - 1 })}`}
+                  className="rounded border border-border px-2 py-1"
+                >
                   ← Prev
                 </Link>
               )}
@@ -338,7 +442,10 @@ export default async function DirectSendPage({
                 Page {page} of {pages}
               </span>
               {page < pages && (
-                <Link href={`/marketing/personal/${send.id}${qs({ page: page + 1 })}`} className="rounded border border-border px-2 py-1">
+                <Link
+                  href={`/marketing/customize/${send.id}${qs({ page: page + 1 })}`}
+                  className="rounded border border-border px-2 py-1"
+                >
                   Next →
                 </Link>
               )}
@@ -359,16 +466,27 @@ export default async function DirectSendPage({
                 </div>
                 <div className="text-sm font-semibold">{preview.subject}</div>
               </div>
-              <iframe title="Email preview" sandbox="" srcDoc={preview.html} className="h-96 w-full bg-white" />
+              <iframe
+                title="Email preview"
+                sandbox=""
+                srcDoc={preview.html}
+                className="h-96 w-full bg-white"
+              />
               {previewFiles && (previewFiles.files.length > 0 || previewFiles.missing.length > 0) && (
                 <div className="flex flex-wrap gap-1.5 border-t border-border/60 px-4 py-2">
                   {previewFiles.files.map((f) => (
-                    <span key={f.id} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">
+                    <span
+                      key={f.id}
+                      className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800"
+                    >
                       <Paperclip className="h-3 w-3" /> {f.filename}
                     </span>
                   ))}
                   {previewFiles.missing.map((n) => (
-                    <span key={n} className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200">
+                    <span
+                      key={n}
+                      className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200"
+                    >
                       <AlertTriangle className="h-3 w-3" /> {n} missing
                     </span>
                   ))}
@@ -376,7 +494,9 @@ export default async function DirectSendPage({
               )}
               {canEdit && (
                 <div className="border-t border-border/60 px-4 py-3">
-                  <div className="mb-1 text-xs font-medium text-muted-foreground">Send this row&apos;s email to yourself</div>
+                  <div className="mb-1 text-xs font-medium text-muted-foreground">
+                    Send this row&apos;s email to yourself
+                  </div>
                   <TestSend id={send.id} rowNumber={previewRow.rowNumber} defaultTo={user.email ?? ""} />
                 </div>
               )}

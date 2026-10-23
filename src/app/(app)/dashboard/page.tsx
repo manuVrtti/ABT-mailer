@@ -205,7 +205,7 @@ export default async function DashboardPage() {
       where: scoped,
       orderBy: { createdAt: "desc" },
       take: 3,
-      select: { id: true, name: true, status: true, totalRows: true, createdAt: true },
+      select: { id: true, name: true, status: true, totalRows: true, createdAt: true, single: true },
     }),
     db.emailJob.groupBy({
       by: ["status"],
@@ -324,8 +324,8 @@ export default async function DashboardPage() {
         {(canCreate || canPersonal) && (
           <div className="flex gap-2">
             {canPersonal && (
-              <Button as="a" href="/marketing/personal/new" variant={canCreate ? "secondary" : "primary"}>
-                <Send className="h-4 w-4" /> Personal mails
+              <Button as="a" href="/marketing/customize" variant={canCreate ? "secondary" : "primary"}>
+                <Send className="h-4 w-4" /> Customize mail
               </Button>
             )}
             {canCreate && (
@@ -352,7 +352,7 @@ export default async function DashboardPage() {
             label="Emails sent"
             value={cur.sent.toLocaleString()}
             delta={change(cur.sent, prev.sent)}
-            sub="Campaigns + personal mails"
+            sub="Campaigns + customized mails"
           />
           <StatCard
             label="Delivery rate"
@@ -627,10 +627,10 @@ export default async function DashboardPage() {
           {show.personal && (
             <Card>
               <SectionHeader
-                title="Personal mails"
+                title="Customize mail"
                 actions={
                   <Link
-                    href="/marketing/personal"
+                    href="/marketing/customize"
                     className="inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300"
                   >
                     All <ArrowRight className="h-3 w-3" />
@@ -644,13 +644,13 @@ export default async function DashboardPage() {
                   {recentPersonal.map((p) => (
                     <li key={p.id}>
                       <Link
-                        href={`/marketing/personal/${p.id}`}
+                        href={`/marketing/customize/${p.id}`}
                         className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 hover:bg-muted"
                       >
                         <span className="min-w-0">
                           <span className="block truncate text-sm">{p.name}</span>
                           <span className="text-2xs text-muted-foreground">
-                            {p.totalRows} emails · {shortDate.format(p.createdAt)}
+                            {p.single ? "Single email" : `${p.totalRows} emails`} · {shortDate.format(p.createdAt)}
                           </span>
                         </span>
                         <Badge

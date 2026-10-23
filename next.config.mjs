@@ -7,6 +7,13 @@ const nextConfig = {
       bodySizeLimit: "10mb",
     },
   },
+  // "Personal mails" became "Customize mail"; keep old links working.
+  async redirects() {
+    return [
+      { source: "/marketing/personal", destination: "/marketing/customize", permanent: true },
+      { source: "/marketing/personal/:path*", destination: "/marketing/customize/:path*", permanent: true },
+    ];
+  },
   async headers() {
     return [
       {

@@ -13,12 +13,13 @@ import {
   attachmentsForRow,
   cancelDirectSend,
   launchDirectSend,
+  MAX_SINGLE_RECIPIENTS,
   renderDirectEmail,
 } from "@/server/direct-send/service";
 import { canSendAs, currentScope } from "@/server/access/scope";
 import { requirePermission } from "@/server/access/permissions";
 
-const PATH = "/marketing/personal";
+const PATH = "/marketing/customize";
 
 /** Batch actions only work on batches sent from this person's brands. */
 async function hasBatchAccess(id: string): Promise<boolean> {
@@ -118,6 +119,129 @@ export async function createDirectSend(json: string): Promise<CreateResult> {
   return { ok: true, id: send.id };
 }
 
+// ---------------------------------------------------------------------------
+// Single email: one message to any address, with CC / BCC.
+// ---------------------------------------------------------------------------
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const addressList = z.array(z.string().max(254)).max(MAX_SINGLE_RECIPIENTS);
+
+const singleSchema = z.object({
+  id: z.string().max(40).optional(),
+  fromEmail: z.string().email("Pick a sender"),
+  to: addressList,
+  cc: addressList,
+  bcc: addressList,
+  subject: z.string().trim().min(1, "Add a subject").max(DIRECT_SEND_LIMITS.subjectChars),
+  body: z
+    .string()
+    .max(DIRECT_SEND_LIMITS.bodyChars)
+    .refine((b) => b.trim().length > 0, "Write a message"),
+});
+
+export type SingleInput = z.input<typeof singleSchema>;
+
+/** Clean the three address lists: lower-case, no duplicates, each address in one list only (To > CC > BCC). */
+function cleanRecipients(to: string[], cc: string[], bcc: string[]) {
+  const seen = new Set<string>();
+  const bad: string[] = [];
+  const take = (list: string[]) =>
+    list
+      .map((e) => normalizeEmail(e))
+      .filter((e) => {
+        if (!e) return false;
+        if (!EMAIL_RE.test(e)) {
+          bad.push(e);
+          return false;
+        }
+        if (seen.has(e)) return false;
+        seen.add(e);
+        return true;
+      });
+  return { to: take(to), cc: take(cc), bcc: take(bcc), bad };
+}
+
+/** Save a single email as a draft (new, or an existing draft). Files are uploaded separately. */
+export async function saveSingleMail(input: SingleInput): Promise<CreateResult> {
+  const user = await requirePermission("personal.manage");
+  const parsed = singleSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Invalid email" };
+  const d = parsed.data;
+
+  const r = cleanRecipients(d.to, d.cc, d.bcc);
+  if (r.bad.length) return { ok: false, error: `Not a valid email address: ${r.bad.slice(0, 3).join(", ")}` };
+  if (r.to.length === 0) return { ok: false, error: "Add at least one To address." };
+  const total = r.to.length + r.cc.length + r.bcc.length;
+  if (total > MAX_SINGLE_RECIPIENTS) {
+    return {
+      ok: false,
+      error: `${total} recipients — one email can go to at most ${MAX_SINGLE_RECIPIENTS}.`,
+    };
+  }
+  if (!canSendAs(await currentScope(), d.fromEmail)) {
+    return { ok: false, error: `You don't have access to send as ${d.fromEmail}.` };
+  }
+  const brand = senderBrand(await listBrands(), d.fromEmail);
+  if (!brand) return { ok: false, error: `${d.fromEmail} isn't on a domain verified in SES.` };
+
+  const fields = {
+    name: d.subject.slice(0, 200),
+    kind: DirectSendKind.PERSONAL,
+    single: true,
+    fromEmail: normalizeEmail(d.fromEmail),
+    fromName: brand.fromName,
+    replyTo: brand.replyTo,
+    totalRows: 1,
+    toEmails: r.to,
+    ccEmails: r.cc,
+    bccEmails: r.bcc,
+  };
+  const row = {
+    email: r.to[0]!,
+    name: null,
+    subject: d.subject,
+    body: d.body,
+    variables: {} as Prisma.InputJsonValue,
+  };
+
+  let id = d.id;
+  if (id) {
+    if (!(await hasBatchAccess(id))) return { ok: false, error: "Email not found." };
+    const existing = await db.directSend.findUnique({
+      where: { id },
+      select: { single: true, status: true },
+    });
+    if (!existing?.single) return { ok: false, error: "Email not found." };
+    if (existing.status !== DirectSendStatus.DRAFT)
+      return { ok: false, error: "This email was already sent." };
+    await db.$transaction([
+      db.directSend.update({ where: { id }, data: fields }),
+      db.directSendRow.upsert({
+        where: { directSendId_rowNumber: { directSendId: id, rowNumber: 1 } },
+        create: { directSendId: id, rowNumber: 1, ...row },
+        update: row,
+      }),
+    ]);
+  } else {
+    const send = await db.directSend.create({
+      data: { ...fields, createdById: user.id, rows: { create: { rowNumber: 1, ...row } } },
+    });
+    id = send.id;
+    await db.auditLog.create({
+      data: {
+        userId: user.id,
+        action: "direct_send.create_single",
+        resource: `direct_send:${id}`,
+        metadata: { to: r.to.length, cc: r.cc.length, bcc: r.bcc.length },
+        result: "success",
+      },
+    });
+  }
+  revalidatePath(PATH);
+  revalidatePath(`${PATH}/${id}`);
+  return { ok: true, id };
+}
+
 export type UploadResult =
   | { ok: true; attachment: { id: string; filename: string; size: number; forAll: boolean } }
   | { ok: false; error: string };
@@ -135,7 +259,8 @@ export async function uploadDirectSendAttachment(formData: FormData): Promise<Up
   }
   const send = await db.directSend.findUnique({ where: { id }, select: { status: true } });
   if (!send) return { ok: false, error: "Batch not found." };
-  if (send.status !== DirectSendStatus.DRAFT) return { ok: false, error: "Files can only change before sending." };
+  if (send.status !== DirectSendStatus.DRAFT)
+    return { ok: false, error: "Files can only change before sending." };
 
   const filename = file.name.replace(/[\\/]/g, "_").slice(0, 200);
   const data = Buffer.from(await file.arrayBuffer());
@@ -196,7 +321,11 @@ export async function sendDirectSendTest(id: string, rowNumber: number, to: stri
       fromEmail: send.fromEmail,
       fromName: send.fromName,
       replyTo: send.replyTo ?? undefined,
-      attachments: files.map((f) => ({ filename: f.filename, contentType: f.contentType, content: new Uint8Array(f.data) })),
+      attachments: files.map((f) => ({
+        filename: f.filename,
+        contentType: f.contentType,
+        content: new Uint8Array(f.data),
+      })),
     });
     return { ok: true, message: `Row ${rowNumber}'s email sent to ${address}.` };
   } catch (err) {
@@ -206,11 +335,18 @@ export async function sendDirectSendTest(id: string, rowNumber: number, to: stri
 
 export async function launchDirectSendAction(id: string): Promise<SimpleResult> {
   const user = await requirePermission("personal.manage");
-  if (!(await hasBatchAccess(id))) return { ok: false, error: "You don't have access to this batch's sender." };
+  if (!(await hasBatchAccess(id)))
+    return { ok: false, error: "You don't have access to this batch's sender." };
   try {
     const r = await launchDirectSend(id);
     await db.auditLog.create({
-      data: { userId: user.id, action: "direct_send.launch", resource: `direct_send:${id}`, metadata: r, result: "success" },
+      data: {
+        userId: user.id,
+        action: "direct_send.launch",
+        resource: `direct_send:${id}`,
+        metadata: r,
+        result: "success",
+      },
     });
     revalidatePath(PATH);
     revalidatePath(`${PATH}/${id}`);
@@ -226,10 +362,17 @@ export async function launchDirectSendAction(id: string): Promise<SimpleResult> 
 
 export async function cancelDirectSendAction(id: string): Promise<SimpleResult> {
   const user = await requirePermission("personal.manage");
-  if (!(await hasBatchAccess(id))) return { ok: false, error: "You don't have access to this batch's sender." };
+  if (!(await hasBatchAccess(id)))
+    return { ok: false, error: "You don't have access to this batch's sender." };
   const n = await cancelDirectSend(id);
   await db.auditLog.create({
-    data: { userId: user.id, action: "direct_send.cancel", resource: `direct_send:${id}`, metadata: { skipped: n }, result: "success" },
+    data: {
+      userId: user.id,
+      action: "direct_send.cancel",
+      resource: `direct_send:${id}`,
+      metadata: { skipped: n },
+      result: "success",
+    },
   });
   revalidatePath(PATH);
   revalidatePath(`${PATH}/${id}`);
@@ -238,15 +381,23 @@ export async function cancelDirectSendAction(id: string): Promise<SimpleResult> 
 
 export async function deleteDirectSend(id: string): Promise<SimpleResult> {
   const user = await requirePermission("personal.manage");
-  if (!(await hasBatchAccess(id))) return { ok: false, error: "You don't have access to this batch's sender." };
+  if (!(await hasBatchAccess(id)))
+    return { ok: false, error: "You don't have access to this batch's sender." };
   const send = await db.directSend.findUnique({ where: { id }, select: { status: true, name: true } });
   if (!send) return { ok: false, error: "Batch not found." };
-  if (send.status === DirectSendStatus.SENDING) return { ok: false, error: "Cancel the batch before deleting it." };
+  if (send.status === DirectSendStatus.SENDING)
+    return { ok: false, error: "Cancel the batch before deleting it." };
   // Sent emails keep their log rows; only the batch, its rows and files go.
   await db.emailJob.updateMany({ where: { directSendId: id }, data: { attachmentIds: [] } });
   await db.directSend.delete({ where: { id } });
   await db.auditLog.create({
-    data: { userId: user.id, action: "direct_send.delete", resource: `direct_send:${id}`, metadata: { name: send.name }, result: "success" },
+    data: {
+      userId: user.id,
+      action: "direct_send.delete",
+      resource: `direct_send:${id}`,
+      metadata: { name: send.name },
+      result: "success",
+    },
   });
   revalidatePath(PATH);
   return { ok: true, message: "Deleted." };

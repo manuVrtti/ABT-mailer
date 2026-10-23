@@ -5,6 +5,10 @@ import type { EmailCategory, EmailType } from "@prisma/client";
  */
 export interface ProviderSendPayload {
   to: string;
+  /** More recipients of the same message (single emails). */
+  alsoTo?: string[];
+  cc?: string[];
+  bcc?: string[];
   from: { email: string; name?: string };
   replyTo?: string;
   subject: string;

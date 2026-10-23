@@ -147,7 +147,7 @@ function AccessDialog({
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          They&apos;ll only see campaigns, personal mails, logs, analytics and templates of these brands, and can only send as them.
+          They&apos;ll only see campaigns, customized mails, logs, analytics and templates of these brands, and can only send as them.
           Contacts, lists and segments stay shared.
         </p>
 

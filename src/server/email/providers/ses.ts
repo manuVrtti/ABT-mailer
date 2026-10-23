@@ -30,7 +30,11 @@ export class SESProvider implements EmailProvider {
 
     const cmd = new SendEmailCommand({
       FromEmailAddress: fromAddress,
-      Destination: { ToAddresses: [payload.to] },
+      Destination: {
+        ToAddresses: [payload.to, ...(payload.alsoTo ?? [])],
+        CcAddresses: payload.cc?.length ? payload.cc : undefined,
+        BccAddresses: payload.bcc?.length ? payload.bcc : undefined,
+      },
       ReplyToAddresses: payload.replyTo ? [payload.replyTo] : undefined,
       ConfigurationSetName: payload.configurationSet,
       EmailTags: payload.tags

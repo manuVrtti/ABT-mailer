@@ -7,7 +7,7 @@ export const metadata = { title: "Sign in" };
 
 const POINTS = [
   { icon: DatabaseZap, title: "Live audiences", text: "Lists that stay in sync with the Klymb database." },
-  { icon: Send, title: "Campaigns & personal mails", text: "Bulk sends, or a different email to every person." },
+  { icon: Send, title: "Campaigns & customized mails", text: "Bulk sends, or a different email to every person." },
   { icon: BarChart3, title: "Real analytics", text: "Delivered, opened, clicked and bounced — per email." },
   { icon: ShieldCheck, title: "Deliverability built in", text: "Suppressions, unsubscribes and bounce handling." },
 ];
