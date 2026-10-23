@@ -10,6 +10,7 @@ import { CampaignStatus, Role } from "@prisma/client";
 import { campaignAudienceSummary, campaignListIds } from "@/server/campaigns/audience";
 import { currentScope, requireVisible } from "@/server/access/scope";
 import { currentPermissions } from "@/server/access/permissions";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 // Launch/resume server actions run here; the launcher self-limits to ~40s.
@@ -34,6 +35,7 @@ export default async function CampaignDetailPage({
   params: { id: string };
   searchParams: { activity?: string; q?: string; page?: string };
 }) {
+  await requireAccess("campaigns.manage");
   const user = await requireUser();
   const campaign = await db.campaign.findUnique({
     where: { id: params.id },

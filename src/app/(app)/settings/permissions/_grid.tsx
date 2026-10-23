@@ -14,11 +14,14 @@ export function PermissionsGrid({
   permissions,
   initial,
   defaults,
+  marketerOnly,
   people,
 }: {
   permissions: { key: string; label: string; hint: string }[];
   initial: Record<Roles, string[]>;
   defaults: Record<Roles, readonly string[]>;
+  /** Permissions viewers can't have (they're actions, and viewers are read-only). */
+  marketerOnly: readonly string[];
   people: Record<"ADMIN" | Roles, number>;
 }) {
   const router = useRouter();
@@ -86,6 +89,17 @@ export function PermissionsGrid({
                 </td>
                 {(["MARKETER", "VIEWER"] as Roles[]).map((role) => {
                   const on = state[role].includes(p.key);
+                  if (role === "VIEWER" && marketerOnly.includes(p.key)) {
+                    return (
+                      <td
+                        key={role}
+                        className="px-4 py-3 text-center text-xs text-muted-foreground"
+                        title="Viewers are read-only"
+                      >
+                        —
+                      </td>
+                    );
+                  }
                   return (
                     <td key={role} className="px-4 py-3 text-center">
                       <button
@@ -114,8 +128,8 @@ export function PermissionsGrid({
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-xs text-muted-foreground">
-          Always admin-only: Settings (users, senders, suppressions, audit log, these permissions) and
-          deleting templates, segments or logs.
+          Viewers are always read-only. Always admin-only: Settings (except each person&apos;s own account)
+          and deleting templates, segments or logs.
         </p>
         <div className="flex gap-2">
           <button

@@ -4,10 +4,12 @@ import { PageHeader, Card, Badge, Button, Table, THead, TR, TH, TD } from "@/com
 import { TemplateForm } from "../_template-form";
 import { ActivateButton } from "./_activate-button";
 import { TestSendPanel } from "./_test-send";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function TemplateDetailPage({ params }: { params: { key: string } }) {
+  await requireAccess("transactional.manage");
   const templateKey = decodeURIComponent(params.key);
   const versions = await db.transactionalTemplate.findMany({
     where: { templateKey },

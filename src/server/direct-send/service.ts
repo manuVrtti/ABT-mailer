@@ -62,6 +62,53 @@ export function attachmentsForRow<T extends { filename: string; forAll: boolean 
   return { files: [...files.values()], missing };
 }
 
+/** SES accepts at most 50 recipients (To + CC + BCC) per message. */
+export const MAX_SINGLE_RECIPIENTS = 50;
+
+export interface SingleRecipients {
+  /** To addresses on the do-not-send list — sending is blocked until they're removed. */
+  blockedTo: { email: string; reason: string }[];
+  /** CC / BCC addresses on the do-not-send list — left out when sending. */
+  droppedCopies: { email: string; reason: string }[];
+  extraTo: string[];
+  cc: string[];
+  bcc: string[];
+}
+
+/** Who a single email actually goes to, after the do-not-send list. */
+export async function singleRecipients(send: {
+  kind: DirectSendKind;
+  fromEmail: string;
+  toEmails: string[];
+  ccEmails: string[];
+  bccEmails: string[];
+}): Promise<SingleRecipients> {
+  const brand = await brandForAddress(send.fromEmail);
+  const { category } = categoryFor(send.kind);
+  const all = [...send.toEmails, ...send.ccEmails, ...send.bccEmails];
+  const decisions = await checkSuppressionBulk(all, category, brand.key);
+  const reasonOf = (e: string) => {
+    const d = decisions.get(e);
+    return d && !d.allowed ? d.reason ?? "on the do-not-send list" : null;
+  };
+  const blockedTo = send.toEmails.flatMap((email) => {
+    const reason = reasonOf(email);
+    return reason ? [{ email, reason }] : [];
+  });
+  const droppedCopies = [...send.ccEmails, ...send.bccEmails].flatMap((email) => {
+    const reason = reasonOf(email);
+    return reason ? [{ email, reason }] : [];
+  });
+  const ok = (e: string) => !reasonOf(e);
+  return {
+    blockedTo,
+    droppedCopies,
+    extraTo: send.toEmails.slice(1),
+    cc: send.ccEmails.filter(ok),
+    bcc: send.bccEmails.filter(ok),
+  };
+}
+
 export interface LaunchProblem {
   rowNumber: number;
   email: string;
@@ -74,6 +121,11 @@ export async function checkDirectSendReady(directSendId: string): Promise<Launch
     where: { id: directSendId },
     select: {
       fromEmail: true,
+      kind: true,
+      single: true,
+      toEmails: true,
+      ccEmails: true,
+      bccEmails: true,
       rows: { select: { rowNumber: true, email: true, attachmentNames: true }, orderBy: { rowNumber: "asc" } },
       attachments: { select: { filename: true, forAll: true, size: true } },
     },
@@ -84,6 +136,16 @@ export async function checkDirectSendReady(directSendId: string): Promise<Launch
     problems.push({ rowNumber: 0, email: "", problem: `${send.fromEmail} is not on a domain verified in SES` });
   }
   if (send.rows.length === 0) problems.push({ rowNumber: 0, email: "", problem: "No rows to send" });
+  if (send.single) {
+    if (send.toEmails.length === 0) problems.push({ rowNumber: 0, email: "", problem: "Add at least one To address" });
+    const total = send.toEmails.length + send.ccEmails.length + send.bccEmails.length;
+    if (total > MAX_SINGLE_RECIPIENTS) {
+      problems.push({ rowNumber: 0, email: "", problem: `${total} recipients — one email can go to at most ${MAX_SINGLE_RECIPIENTS}` });
+    }
+    for (const b of (await singleRecipients(send)).blockedTo) {
+      problems.push({ rowNumber: 0, email: b.email, problem: `${b.email} can't be emailed (${b.reason}) — remove it from To` });
+    }
+  }
   for (const r of send.rows) {
     const { files, missing } = attachmentsForRow(send.attachments, r.attachmentNames);
     if (missing.length) problems.push({ rowNumber: r.rowNumber, email: r.email, problem: `Missing file: ${missing.join(", ")}` });
@@ -132,6 +194,8 @@ export async function launchDirectSend(directSendId: string): Promise<{ queued: 
 
   const brand = await brandForAddress(send.fromEmail);
   const { emailType, category } = categoryFor(send.kind);
+  // Single email: the one job also carries the other To, CC and BCC addresses.
+  const copies = send.single ? await singleRecipients(send) : null;
   let queued = 0;
   let skipped = 0;
   let cursor = 0;
@@ -162,7 +226,10 @@ export async function launchDirectSend(directSendId: string): Promise<{ queued: 
           recipientEmail: r.email,
           directSendId,
           attachmentIds: attachmentsForRow(send.attachments, r.attachmentNames).files.map((a) => a.id),
-          eventType: "personal_mail",
+          extraTo: copies?.extraTo ?? [],
+          cc: copies?.cc ?? [],
+          bcc: copies?.bcc ?? [],
+          eventType: send.single ? "single_mail" : "personal_mail",
           subject: email.subject,
           fromEmail: send.fromEmail,
           fromName: send.fromName,

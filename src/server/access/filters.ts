@@ -61,3 +61,15 @@ export function sendableSenders(scope: SenderScope): { email: string; label: str
     .filter((b) => b.sesVerified)
     .flatMap((b) => b.fromAddresses.map((email) => ({ email, label: `${b.fromName} <${email}>`, brandKey: b.key })));
 }
+
+/** Live Klymb lists read Klymb's users, so only people with the Klymb brand see them. */
+export const KLYMB_BRAND_KEY = "klymb";
+
+export function canSeeKlymb(scope: SenderScope): boolean {
+  return scope.all || scope.brandKeys.includes(KLYMB_BRAND_KEY);
+}
+
+/** A Prisma where on contact lists: hides Klymb lists from people without the Klymb brand. */
+export function contactListWhere(scope: SenderScope): Prisma.ContactListWhereInput {
+  return canSeeKlymb(scope) ? {} : { kind: { not: "KLYMB" } };
+}

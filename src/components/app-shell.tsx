@@ -62,11 +62,17 @@ const SECTIONS: NavSection[] = [
   {
     label: "Marketing",
     items: [
-      { href: "/marketing/campaigns", label: "Campaigns", icon: Megaphone, live: "campaignsSending" },
-      { href: "/marketing/personal", label: "Personal mails", icon: Send },
-      { href: "/marketing/contacts", label: "Contacts", icon: Users },
-      { href: "/marketing/segments", label: "Segments", icon: Filter },
-      { href: "/marketing/templates", label: "Templates", icon: FileText },
+      {
+        href: "/marketing/campaigns",
+        label: "Campaigns",
+        icon: Megaphone,
+        live: "campaignsSending",
+        needs: "campaigns.manage",
+      },
+      { href: "/marketing/customize", label: "Customize mail", icon: Send, needs: "personal.manage" },
+      { href: "/marketing/contacts", label: "Contacts", icon: Users, needs: "contacts.manage" },
+      { href: "/marketing/segments", label: "Segments", icon: Filter, needs: "contacts.manage" },
+      { href: "/marketing/templates", label: "Templates", icon: FileText, needs: "templates.manage" },
       { href: "/marketing/analytics", label: "Analytics", icon: BarChart3, needs: "analytics.view" },
     ],
   },
@@ -74,17 +80,20 @@ const SECTIONS: NavSection[] = [
     label: "Transactional",
     items: [
       { href: "/transactional/realtime", label: "Real time", icon: Activity, needs: "logs.view" },
-      { href: "/transactional/templates", label: "Templates", icon: Mail },
-      { href: "/transactional/events", label: "Events", icon: Zap },
+      { href: "/transactional/templates", label: "Templates", icon: Mail, needs: "transactional.manage" },
+      { href: "/transactional/events", label: "Events", icon: Zap, needs: "transactional.manage" },
       { href: "/transactional/logs", label: "Logs", icon: ScrollText, needs: "logs.view" },
       { href: "/transactional/analytics", label: "Analytics", icon: BarChart3, needs: "analytics.view" },
     ],
   },
 ];
 
+const KLYMB_NEW = "/marketing/contacts/lists/klymb/new";
+
 const CREATE: { label: string; href: string; icon: LucideIcon; needs: Permission }[] = [
   { label: "Campaign", href: "/marketing/campaigns/new", icon: Megaphone, needs: "campaigns.manage" },
-  { label: "Personal mails", href: "/marketing/personal/new", icon: Send, needs: "personal.manage" },
+  { label: "Bulk mail (CSV)", href: "/marketing/customize/new", icon: Send, needs: "personal.manage" },
+  { label: "Single email", href: "/marketing/customize/single", icon: Mail, needs: "personal.manage" },
   {
     label: "Klymb list",
     href: "/marketing/contacts/lists/klymb/new",
@@ -148,7 +157,8 @@ const CRUMB: Record<string, string | null> = {
   marketing: null,
   transactional: null,
   campaigns: "Campaigns",
-  personal: "Personal mails",
+  customize: "Customize mail",
+  single: "Single email",
   contacts: "Contacts",
   lists: "Lists",
   klymb: "Klymb list",
@@ -191,24 +201,41 @@ export function AppShell({
   user,
   counts,
   permissions,
+  access,
+  klymb,
   children,
 }: {
   user: { name?: string | null; email?: string | null; role: Role };
   counts: NavCounts;
-  /** What this person's role may do; hides nav items and create actions. */
+  /** What this person may do (create, edit, send); filters the Create menu. */
   permissions: Permission[];
+  /** Sections this person may open; filters the sidebar and search. */
+  access: Permission[];
+  /** Whether this person has the Klymb brand (live Klymb lists). */
+  klymb: boolean;
   children: React.ReactNode;
 }) {
-  const can = (p?: Permission) => !p || permissions.includes(p);
-  const createItems = CREATE.filter((c) => can(c.needs));
+  const isAdmin = user.role === "ADMIN";
+  const canOpen = (p?: Permission) => !p || access.includes(p);
+  const canDo = (p?: Permission) => !p || permissions.includes(p);
+  const createItems = CREATE.filter((c) => canDo(c.needs) && (klymb || c.href !== KLYMB_NEW));
   const navSections = SECTIONS.map((sec) => ({
     ...sec,
-    items: sec.items.filter((i) => can(i.needs)),
+    items: sec.items.filter((i) => canOpen(i.needs)),
   })).filter((sec) => sec.items.length > 0);
-  const hidden = new Set(
-    [...SECTIONS.flatMap((x) => x.items), ...CREATE].filter((i) => !can(i.needs)).map((i) => i.href),
+  // Settings pages other than "Your account" are admin-only.
+  const settingsHref = isAdmin ? "/settings" : "/settings/account";
+  const hidden = new Set([
+    ...SECTIONS.flatMap((x) => x.items)
+      .filter((i) => !canOpen(i.needs))
+      .map((i) => i.href),
+    ...CREATE.filter((c) => !createItems.includes(c)).map((c) => c.href),
+    ...(canOpen("contacts.manage") ? [] : ["/marketing/contacts/lists"]),
+    ...(isAdmin ? [] : ["/settings/senders", "/settings/suppressions", "/settings/users"]),
+  ]);
+  const paletteLinks = PALETTE_LINKS.filter((l) => !hidden.has(l.href)).map((l) =>
+    l.href === "/settings" ? { ...l, href: settingsHref } : l,
   );
-  const paletteLinks = PALETTE_LINKS.filter((l) => !hidden.has(l.href));
   const pathname = usePathname();
   const router = useRouter();
   const [compact, setCompact] = useState(false);
@@ -371,7 +398,7 @@ export function AppShell({
       {/* Footer: settings + account */}
       <div className={cn("shrink-0 space-y-0.5 border-t border-border py-2", isCompact ? "px-2" : "px-3")}>
         <Link
-          href="/settings"
+          href={settingsHref}
           title={isCompact ? "Settings" : undefined}
           className={cn(
             "flex h-8 items-center gap-2.5 rounded-md text-sm transition-colors",

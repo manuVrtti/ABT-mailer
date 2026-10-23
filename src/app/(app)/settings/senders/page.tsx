@@ -3,11 +3,14 @@ import { db } from "@/lib/db";
 import { PageHeader, Card } from "@/components/ui";
 import { envBrand } from "@/server/brands";
 import { BrandForm, BrandRowActions } from "./_sender-buttons";
+import { requireRole } from "@/lib/auth/session";
+import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Senders" };
 
 export default async function SendersPage() {
+  await requireRole([Role.ADMIN]);
   const brands = await db.brand.findMany({ orderBy: [{ isDefault: "desc" }, { name: "asc" }] });
   const fallback = envBrand();
 

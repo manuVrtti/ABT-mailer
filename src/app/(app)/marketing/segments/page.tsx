@@ -2,11 +2,15 @@ import Link from "next/link";
 import { Filter, Users2, ArrowRight } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Button, EmptyState } from "@/components/ui";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Segments" };
 
 export default async function SegmentsPage() {
+  await requireAccess("contacts.manage");
+  const canEdit = (await currentPermissions()).has("contacts.manage");
   const segments = await db.segment.findMany({ orderBy: { updatedAt: "desc" } });
   return (
     <div>
@@ -14,14 +18,14 @@ export default async function SegmentsPage() {
         title="Segments"
         icon={Filter}
         description="Saved audience filters. Reuse a segment across many campaigns instead of rebuilding the filter each time."
-        actions={<Button as="a" href="/marketing/segments/new">New segment</Button>}
+        actions={canEdit && <Button as="a" href="/marketing/segments/new">New segment</Button>}
       />
       {segments.length === 0 ? (
         <EmptyState
           icon={Filter}
           title="No segments yet"
           description="Try 'AI Workshop attendees from ABES, 4th year, not registered' — filter now, reuse forever."
-          action={<Button as="a" href="/marketing/segments/new">Create segment</Button>}
+          action={canEdit ? <Button as="a" href="/marketing/segments/new">Create segment</Button> : undefined}
         />
       ) : (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">

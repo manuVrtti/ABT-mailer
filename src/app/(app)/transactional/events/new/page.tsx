@@ -1,11 +1,13 @@
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { RuleForm } from "../_rule-form";
+import { requirePermission } from "@/server/access/permissions";
 
 export const metadata = { title: "New event rule" };
 export const dynamic = "force-dynamic";
 
 export default async function NewEventRulePage() {
+  await requirePermission("transactional.manage");
   const templates = await db.transactionalTemplate.findMany({
     where: { isActive: true },
     orderBy: { templateKey: "asc" },

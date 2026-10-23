@@ -91,7 +91,9 @@ export default async function EmailLogDetailPage({ params }: { params: { jobId: 
   steps.sort((a, b) => b.at.getTime() - a.at.getTime());
 
   const meta: [string, React.ReactNode][] = [
-    ["Recipient (To)", job.recipientEmail],
+    ["Recipient (To)", [job.recipientEmail, ...job.extraTo].join(", ")],
+    ...(job.cc.length ? ([["CC", job.cc.join(", ")]] as [string, React.ReactNode][]) : []),
+    ...(job.bcc.length ? ([["BCC", job.bcc.join(", ")]] as [string, React.ReactNode][]) : []),
     ["From", job.fromName ? `${job.fromName} <${job.fromEmail}>` : job.fromEmail],
     ["Reply-to", job.replyTo ?? "—"],
     [

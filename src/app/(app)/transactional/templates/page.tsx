@@ -1,11 +1,15 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, Table, THead, TR, TH, TD, Badge, Button, EmptyState } from "@/components/ui";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Transactional templates" };
 
 export default async function TransactionalTemplatesPage() {
+  await requireAccess("transactional.manage");
+  const canEdit = (await currentPermissions()).has("transactional.manage");
   // One row per templateKey — pick the active version, fall back to newest.
   const templates = await db.transactionalTemplate.findMany({
     orderBy: [{ templateKey: "asc" }, { version: "desc" }],
@@ -23,13 +27,13 @@ export default async function TransactionalTemplatesPage() {
       <PageHeader
         title="Transactional templates"
         description="Emails automatically triggered by ABTalks events. Every change creates a new immutable version."
-        actions={<Button as="a" href="/transactional/templates/new">New template</Button>}
+        actions={canEdit && <Button as="a" href="/transactional/templates/new">New template</Button>}
       />
       {rows.length === 0 ? (
         <EmptyState
           title="No transactional templates yet"
           description="Create your first template — welcome_email, password_reset, etc."
-          action={<Button as="a" href="/transactional/templates/new">Create template</Button>}
+          action={canEdit ? <Button as="a" href="/transactional/templates/new">Create template</Button> : undefined}
         />
       ) : (
         <Table>

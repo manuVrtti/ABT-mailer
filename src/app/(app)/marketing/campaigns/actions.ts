@@ -16,7 +16,7 @@ import { EmailService } from "@/server/email";
 import { getServerEnv } from "@/lib/env";
 import { logger } from "@/lib/logger";
 import { brandForAddress, defaultBrand, listBrands, senderBrand } from "@/server/brands";
-import { canSendAs, canUseTemplate, currentScope } from "@/server/access/scope";
+import { canSendAs, canUseTemplate, contactListWhere, currentScope } from "@/server/access/scope";
 import { requirePermission } from "@/server/access/permissions";
 
 function slugify(name: string): string {
@@ -170,7 +170,7 @@ export async function updateCampaignAudience(formData: FormData) {
   if (requestedListIds.length > 0) {
     // Keep the user's selection order; drop ids that no longer exist.
     const found = await db.contactList.findMany({
-      where: { id: { in: requestedListIds } },
+      where: { AND: [{ id: { in: requestedListIds } }, contactListWhere(await currentScope())] },
       select: { id: true },
     });
     const valid = new Set(found.map((l) => l.id));

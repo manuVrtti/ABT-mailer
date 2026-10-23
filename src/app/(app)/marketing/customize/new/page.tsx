@@ -9,7 +9,7 @@ import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
-export const metadata = { title: "New personal mails" };
+export const metadata = { title: "New bulk mail" };
 
 export default async function NewDirectSendPage() {
   await requirePermission("personal.manage");
@@ -20,7 +20,7 @@ export default async function NewDirectSendPage() {
   return (
     <div>
       <PageHeader
-        title="New personal mails"
+        title="New bulk mail (CSV)"
         icon={Send}
         description="Upload a CSV where every row is one email: who it goes to, its subject, its body and (optionally) its attachments."
       />

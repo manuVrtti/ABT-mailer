@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { PageHeader, Table, THead, TR, TH, TD, Badge, EmptyState, Button } from "@/components/ui";
 import { ContactsTabs } from "../_tabs";
 import type { ImportJobStatus } from "@prisma/client";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Import history" };
@@ -18,6 +20,8 @@ const statusTone: Record<ImportJobStatus, "muted" | "success" | "warning" | "des
 };
 
 export default async function ImportsPage() {
+  await requireAccess("contacts.manage");
+  const canEdit = (await currentPermissions()).has("contacts.manage");
   const jobs = await db.importJob.findMany({
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -30,7 +34,7 @@ export default async function ImportsPage() {
       <PageHeader
         title="Import history"
         description="Every CSV upload. Click a job to see rows, duplicates, and any failures."
-        actions={<Button as="a" href="/marketing/contacts/import">New import</Button>}
+        actions={canEdit && <Button as="a" href="/marketing/contacts/import">New import</Button>}
       />
       {jobs.length === 0 ? (
         <EmptyState title="No imports yet" description="Upload a CSV to get started." />

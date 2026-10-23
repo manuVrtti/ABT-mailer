@@ -2,11 +2,15 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { PageHeader, Table, THead, TR, TH, TD, Badge, Button, EmptyState } from "@/components/ui";
 import { ToggleRule } from "./_toggle";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Event rules" };
 
 export default async function EventRulesPage() {
+  await requireAccess("transactional.manage");
+  const canEdit = (await currentPermissions()).has("transactional.manage");
   const rules = await db.emailEventRule.findMany({ orderBy: { eventType: "asc" } });
 
   return (
@@ -14,13 +18,13 @@ export default async function EventRulesPage() {
       <PageHeader
         title="Event rules"
         description="Each rule maps an ABTalks event (like USER_REGISTERED) to a transactional template."
-        actions={<Button as="a" href="/transactional/events/new">New rule</Button>}
+        actions={canEdit && <Button as="a" href="/transactional/events/new">New rule</Button>}
       />
       {rules.length === 0 ? (
         <EmptyState
           title="No event rules yet"
           description="Create rules so events trigger emails automatically."
-          action={<Button as="a" href="/transactional/events/new">Create rule</Button>}
+          action={canEdit ? <Button as="a" href="/transactional/events/new">Create rule</Button> : undefined}
         />
       ) : (
         <Table>

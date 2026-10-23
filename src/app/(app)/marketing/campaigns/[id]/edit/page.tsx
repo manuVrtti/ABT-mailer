@@ -27,7 +27,7 @@ import { ActionsPanel } from "../_actions-panel";
 import { RecipientsPicker } from "./_recipients-picker";
 import { DesignStudio } from "./_design-studio";
 import { campaignAudienceSummary, campaignListIds, countListsAudience } from "@/server/campaigns/audience";
-import { currentScope, requireVisible, templateWhere } from "@/server/access/scope";
+import { contactListWhere, currentScope, requireVisible, templateWhere } from "@/server/access/scope";
 import { requirePermission } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
@@ -396,6 +396,7 @@ async function RecipientsSection({
   const [lists, segments] = open
     ? await Promise.all([
         db.contactList.findMany({
+          where: contactListWhere(await currentScope()),
           orderBy: { createdAt: "desc" },
           select: { id: true, name: true, _count: { select: { members: true } } },
         }),

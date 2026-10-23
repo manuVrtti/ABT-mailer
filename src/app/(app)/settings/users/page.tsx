@@ -20,7 +20,7 @@ export default async function UsersPage() {
     <div className="space-y-6">
       <PageHeader
         title="Users & roles"
-        description="Only admins can create or modify accounts. Marketers can send; viewers are read-only. Sender access decides which brands each person can send as and see — campaigns, personal mails, logs, analytics and templates."
+        description="Only admins can create or modify accounts. Marketers can send; viewers are read-only. Sender access decides which brands each person can send as and see — campaigns, customized mails, logs, analytics and templates."
       />
 
       <Card>

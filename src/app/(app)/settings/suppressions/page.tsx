@@ -2,11 +2,14 @@ import { db } from "@/lib/db";
 import { PageHeader, Card, Input, Label, Select, Button, Table, THead, TR, TH, TD, Badge, EmptyState } from "@/components/ui";
 import { addManualSuppression, removeSuppression } from "./actions";
 import { RemoveButton } from "./_remove-button";
+import { requireRole } from "@/lib/auth/session";
+import { Role } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Suppressions" };
 
 export default async function SuppressionsPage({ searchParams }: { searchParams: { q?: string } }) {
+  await requireRole([Role.ADMIN]);
   const q = searchParams.q?.trim().toLowerCase();
   const rows = await db.suppression.findMany({
     where: q ? { email: { contains: q } } : undefined,

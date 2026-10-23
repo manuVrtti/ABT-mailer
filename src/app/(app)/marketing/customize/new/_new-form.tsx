@@ -137,7 +137,9 @@ export function NewDirectSendForm({
       return;
     }
     if (res.data.length > DIRECT_SEND_LIMITS.rows) {
-      setCsvError(`This CSV has ${res.data.length.toLocaleString()} rows — the limit is ${DIRECT_SEND_LIMITS.rows.toLocaleString()} per batch.`);
+      setCsvError(
+        `This CSV has ${res.data.length.toLocaleString()} rows — the limit is ${DIRECT_SEND_LIMITS.rows.toLocaleString()} per batch.`,
+      );
       return;
     }
     setCsvName(file.name);
@@ -168,7 +170,8 @@ export function NewDirectSendForm({
       accepted.push(f.name);
     }
     setFiles(next);
-    if (tooBig.length) setFileError(`Larger than 4 MB, not added: ${tooBig.join(", ")}. Compress or split them first.`);
+    if (tooBig.length)
+      setFileError(`Larger than 4 MB, not added: ${tooBig.join(", ")}. Compress or split them first.`);
     return accepted;
   }
 
@@ -197,13 +200,23 @@ export function NewDirectSendForm({
     setSaveError(null);
     const toSend = skipProblems ? readyRows : rows;
     if (!skipProblems && blockedRows.length) {
-      setSaveError(`${blockedRows.length} row(s) have problems — fix the CSV, or tick "Skip rows with problems".`);
+      setSaveError(
+        `${blockedRows.length} row(s) have problems — fix the CSV, or tick "Skip rows with problems".`,
+      );
       return;
     }
     const sendFiles = attachMode === "none" ? [] : files;
-    const payload = JSON.stringify({ name, kind, fromEmail, fileNames: sendFiles.map((f) => f.file.name), rows: toSend });
+    const payload = JSON.stringify({
+      name,
+      kind,
+      fromEmail,
+      fileNames: sendFiles.map((f) => f.file.name),
+      rows: toSend,
+    });
     if (payload.length > DIRECT_SEND_LIMITS.payloadBytes) {
-      setSaveError("This batch is too large to upload at once (over 4 MB of text). Split the CSV into smaller files.");
+      setSaveError(
+        "This batch is too large to upload at once (over 4 MB of text). Split the CSV into smaller files.",
+      );
       return;
     }
     setSaving(true);
@@ -225,12 +238,12 @@ export function NewDirectSendForm({
         if (!up.ok) {
           // The batch exists; the review page lets them re-upload the file.
           setSaveError(`${up.error} You can re-upload it on the next screen.`);
-          router.push(`/marketing/personal/${res.id}`);
+          router.push(`/marketing/customize/${res.id}`);
           return;
         }
       }
       setProgress("Done — opening review…");
-      router.push(`/marketing/personal/${res.id}`);
+      router.push(`/marketing/customize/${res.id}`);
     } catch (err) {
       setSaveError((err as Error).message);
     } finally {
@@ -247,7 +260,12 @@ export function NewDirectSendForm({
         <div className="grid gap-4 md:grid-cols-2">
           <div>
             <Label>Batch name</Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Offer letters — October" maxLength={200} />
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Offer letters — October"
+              maxLength={200}
+            />
           </div>
           <div>
             <Label>Send from</Label>
@@ -288,7 +306,11 @@ export function NewDirectSendForm({
         title="Upload the CSV"
         hint="One row per email. Use {{name}} or any column name, like {{college}}, inside the subject or body."
         right={
-          <a href={sampleHref} download="personal-mails-sample.csv" className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:underline dark:text-emerald-300">
+          <a
+            href={sampleHref}
+            download="personal-mails-sample.csv"
+            className="inline-flex items-center gap-1 text-xs text-emerald-700 hover:underline dark:text-emerald-300"
+          >
             <Download className="h-3.5 w-3.5" /> Sample CSV
           </a>
         }
@@ -296,8 +318,16 @@ export function NewDirectSendForm({
         <DropZone
           accept=".csv,text/csv"
           icon={FileSpreadsheet}
-          title={csvName ? `${csvName} · ${records.length.toLocaleString()} rows` : "Drop your CSV here, or click to choose"}
-          hint={csvName ? "Drop another file to replace it." : "Columns: email, name, subject, body, attachment (optional)"}
+          title={
+            csvName
+              ? `${csvName} · ${records.length.toLocaleString()} rows`
+              : "Drop your CSV here, or click to choose"
+          }
+          hint={
+            csvName
+              ? "Drop another file to replace it."
+              : "Columns: email, name, subject, body, attachment (optional)"
+          }
           onFiles={(fs) => fs[0] && loadCsv(fs[0])}
           done={Boolean(csvName)}
         />
@@ -333,7 +363,11 @@ export function NewDirectSendForm({
       </Step>
 
       {/* 3. Attachments */}
-      <Step n={3} title="Attachments" hint="Optional. Pick how files should go out — you can change it any time.">
+      <Step
+        n={3}
+        title="Attachments"
+        hint="Optional. Pick how files should go out — you can change it any time."
+      >
         <AttachmentsStep
           mode={attachMode}
           onMode={setAttachMode}
@@ -361,12 +395,17 @@ export function NewDirectSendForm({
             </Pill>
             {blockedRows.length > 0 && (
               <Pill tone="danger">
-                <AlertTriangle className="mr-1 h-3.5 w-3.5" /> {blockedRows.length.toLocaleString()} can&apos;t be sent
+                <AlertTriangle className="mr-1 h-3.5 w-3.5" /> {blockedRows.length.toLocaleString()}{" "}
+                can&apos;t be sent
               </Pill>
             )}
             {warnRows.length > 0 && <Pill tone="warning">{warnRows.length} duplicate email(s)</Pill>}
             <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-              <input type="checkbox" checked={onlyProblems} onChange={(e) => setOnlyProblems(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={onlyProblems}
+                onChange={(e) => setOnlyProblems(e.target.checked)}
+              />
               Show only rows with problems
             </label>
           </div>
@@ -402,7 +441,11 @@ export function NewDirectSendForm({
                           {r.name && <div className="truncate text-xs text-muted-foreground">{r.email}</div>}
                         </td>
                         <td className="max-w-[220px] truncate px-3 py-1.5">
-                          {r.subject ? fillVariables(r.subject, r.variables, false) : <span className="text-muted-foreground">—</span>}
+                          {r.subject ? (
+                            fillVariables(r.subject, r.variables, false)
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-1.5 text-xs">
                           <FileCount row={r} files={files} mode={attachMode} />
@@ -411,7 +454,14 @@ export function NewDirectSendForm({
                           {iss.length === 0 ? (
                             <span className="text-xs text-emerald-700 dark:text-emerald-300">Ready</span>
                           ) : (
-                            <span className={cn("text-xs", blocking ? "text-red-700 dark:text-red-300" : "text-amber-700 dark:text-amber-300")}>
+                            <span
+                              className={cn(
+                                "text-xs",
+                                blocking
+                                  ? "text-red-700 dark:text-red-300"
+                                  : "text-amber-700 dark:text-amber-300",
+                              )}
+                            >
                               {iss.map((i) => ISSUE_LABELS[i]).join(", ")}
                             </span>
                           )}
@@ -429,7 +479,11 @@ export function NewDirectSendForm({
             {current && (
               <RowPreview
                 row={current}
-                files={attachMode === "none" ? [] : files.map((f) => ({ ...f, forAll: attachMode === "same" || f.forAll }))}
+                files={
+                  attachMode === "none"
+                    ? []
+                    : files.map((f) => ({ ...f, forAll: attachMode === "same" || f.forAll }))
+                }
                 fromEmail={fromEmail}
                 kind={kind}
               />
@@ -449,14 +503,22 @@ export function NewDirectSendForm({
             ) : rows.length === 0 ? (
               <span className="text-muted-foreground">Upload a CSV to start.</span>
             ) : missingColumns.length ? (
-              <span className="text-destructive">Choose the {missingColumns.map((c) => ROLE_LABELS[c]).join(", ")} column.</span>
+              <span className="text-destructive">
+                Choose the {missingColumns.map((c) => ROLE_LABELS[c]).join(", ")} column.
+              </span>
             ) : (
               <span>
                 <b>{(skipProblems ? readyRows.length : rows.length).toLocaleString()}</b> emails
-                {attachMode !== "none" && files.length > 0 && ` · ${files.length} file${files.length === 1 ? "" : "s"}`}
+                {attachMode !== "none" &&
+                  files.length > 0 &&
+                  ` · ${files.length} file${files.length === 1 ? "" : "s"}`}
                 {blockedRows.length > 0 && (
                   <label className="ml-3 inline-flex items-center gap-1.5 text-xs">
-                    <input type="checkbox" checked={skipProblems} onChange={(e) => setSkipProblems(e.target.checked)} />
+                    <input
+                      type="checkbox"
+                      checked={skipProblems}
+                      onChange={(e) => setSkipProblems(e.target.checked)}
+                    />
                     Skip {blockedRows.length} row(s) with problems
                   </label>
                 )}
@@ -465,7 +527,7 @@ export function NewDirectSendForm({
           </div>
           <div className="flex items-center gap-2">
             {saveError && <span className="max-w-md text-sm text-destructive">{saveError}</span>}
-            <Button as="a" variant="secondary" href="/marketing/personal">
+            <Button as="a" variant="secondary" href="/marketing/customize">
               Cancel
             </Button>
             <Button
@@ -490,7 +552,17 @@ export function NewDirectSendForm({
   );
 }
 
-function RowPreview({ row, files, fromEmail, kind }: { row: DirectRow; files: LocalFile[]; fromEmail: string; kind: Kind }) {
+function RowPreview({
+  row,
+  files,
+  fromEmail,
+  kind,
+}: {
+  row: DirectRow;
+  files: LocalFile[];
+  fromEmail: string;
+  kind: Kind;
+}) {
   const email = buildRowEmail(row);
   const rowFiles = files.filter(
     (f) => f.forAll || row.attachmentNames.some((n) => fileMatches(n, f.file.name)),
@@ -499,7 +571,9 @@ function RowPreview({ row, files, fromEmail, kind }: { row: DirectRow; files: Lo
   return (
     <div className="overflow-hidden rounded-xl border border-border/70 bg-white">
       <div className="space-y-1 border-b border-border/60 bg-slate-50 px-4 py-3 text-xs dark:bg-slate-800/40">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Preview · row {row.rowNumber}</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Preview · row {row.rowNumber}
+        </div>
         <div>
           <span className="text-muted-foreground">From:</span> {fromEmail}
         </div>
@@ -508,28 +582,31 @@ function RowPreview({ row, files, fromEmail, kind }: { row: DirectRow; files: Lo
         </div>
         <div className="text-sm font-semibold">{email.subject || "(no subject)"}</div>
       </div>
-      <iframe
-        title="Email preview"
-        sandbox=""
-        srcDoc={email.html}
-        className="h-80 w-full bg-white"
-      />
+      <iframe title="Email preview" sandbox="" srcDoc={email.html} className="h-80 w-full bg-white" />
       {(rowFiles.length > 0 || missing.length > 0) && (
         <div className="flex flex-wrap gap-1.5 border-t border-border/60 px-4 py-2">
           {rowFiles.map((f) => (
-            <span key={f.file.name} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800">
+            <span
+              key={f.file.name}
+              className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs dark:bg-slate-800"
+            >
               <Paperclip className="h-3 w-3" /> {f.file.name}
             </span>
           ))}
           {missing.map((n) => (
-            <span key={n} className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200">
+            <span
+              key={n}
+              className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-800 dark:bg-red-950/50 dark:text-red-200"
+            >
               <AlertTriangle className="h-3 w-3" /> {n} (not uploaded)
             </span>
           ))}
         </div>
       )}
       {kind === "MARKETING" && (
-        <p className="border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground">An unsubscribe link is added at the bottom when sent.</p>
+        <p className="border-t border-border/60 px-4 py-2 text-[11px] text-muted-foreground">
+          An unsubscribe link is added at the bottom when sent.
+        </p>
       )}
     </div>
   );
@@ -575,7 +652,13 @@ function Pill({ tone, children }: { tone: "success" | "danger" | "warning"; chil
     danger: "bg-red-50 text-red-800 dark:bg-red-950/40 dark:text-red-200",
     warning: "bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-200",
   } as const;
-  return <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium", tones[tone])}>{children}</span>;
+  return (
+    <span
+      className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium", tones[tone])}
+    >
+      {children}
+    </span>
+  );
 }
 
 function KindCard({
@@ -597,7 +680,9 @@ function KindCard({
       onClick={onClick}
       className={cn(
         "flex items-start gap-3 rounded-xl border p-3 text-left transition",
-        active ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40" : "border-border/70 hover:border-emerald-300",
+        active
+          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40"
+          : "border-border/70 hover:border-emerald-300",
       )}
     >
       <Icon className={cn("mt-0.5 h-4 w-4", active ? "text-emerald-600" : "text-muted-foreground")} />
@@ -680,20 +765,34 @@ function DropZone({
 // Attachments
 // ---------------------------------------------------------------------------
 
-const MODES: { value: AttachMode; title: string; hint: string; icon: React.ComponentType<{ className?: string }> }[] = [
+const MODES: {
+  value: AttachMode;
+  title: string;
+  hint: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
   { value: "none", title: "No attachments", hint: "Just the email text.", icon: FileX2 },
   { value: "same", title: "Same file for everyone", hint: "e.g. a brochure or event schedule.", icon: Files },
-  { value: "per_person", title: "A different file for each person", hint: "e.g. offer letters, certificates.", icon: UserRoundCheck },
+  {
+    value: "per_person",
+    title: "A different file for each person",
+    hint: "e.g. offer letters, certificates.",
+    icon: UserRoundCheck,
+  },
 ];
 
 function fileKind(name: string): { icon: React.ComponentType<{ className?: string }>; tone: string } {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (ext === "pdf") return { icon: FileText, tone: "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300" };
+  if (ext === "pdf")
+    return { icon: FileText, tone: "bg-red-50 text-red-600 dark:bg-red-950/50 dark:text-red-300" };
   if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext)) {
     return { icon: FileImage, tone: "bg-sky-50 text-sky-600 dark:bg-sky-950/50 dark:text-sky-300" };
   }
   if (["xls", "xlsx", "csv"].includes(ext)) {
-    return { icon: FileSpreadsheet, tone: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300" };
+    return {
+      icon: FileSpreadsheet,
+      tone: "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-300",
+    };
   }
   return { icon: FileIcon, tone: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300" };
 }
@@ -742,7 +841,8 @@ function AttachmentsStep({
   const count = (s: PersonState) => people.filter((p) => p.state === s).length;
   const matching = filter === "all" ? people : people.filter((p) => p.state === filter);
   const shown = matching.slice(0, 100);
-  const recipientsOf = (fileName: string) => rows.filter((r) => r.attachmentNames.some((n) => fileMatches(n, fileName)));
+  const recipientsOf = (fileName: string) =>
+    rows.filter((r) => r.attachmentNames.some((n) => fileMatches(n, fileName)));
   const totalBytes = files.reduce((n, f) => n + f.file.size, 0);
 
   return (
@@ -757,10 +857,17 @@ function AttachmentsStep({
             aria-pressed={mode === m.value}
             className={cn(
               "flex items-start gap-3 rounded-lg border p-3 text-left transition",
-              mode === m.value ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:bg-brand-950/40" : "border-border hover:border-brand-300",
+              mode === m.value
+                ? "border-brand-500 bg-brand-50 ring-1 ring-brand-500 dark:bg-brand-950/40"
+                : "border-border hover:border-brand-300",
             )}
           >
-            <m.icon className={cn("mt-0.5 h-4 w-4 shrink-0", mode === m.value ? "text-brand-600" : "text-muted-foreground")} />
+            <m.icon
+              className={cn(
+                "mt-0.5 h-4 w-4 shrink-0",
+                mode === m.value ? "text-brand-600" : "text-muted-foreground",
+              )}
+            />
             <span>
               <span className="block text-sm font-medium">{m.title}</span>
               <span className="block text-xs text-muted-foreground">{m.hint}</span>
@@ -781,9 +888,14 @@ function AttachmentsStep({
           {fileError && <p className="text-sm text-destructive">{fileError}</p>}
           {files.length > 0 && (
             <>
-              <FileCards files={files} onRemove={onRemove} describe={() => <span className="text-brand-700 dark:text-brand-300">Everyone</span>} />
+              <FileCards
+                files={files}
+                onRemove={onRemove}
+                describe={() => <span className="text-brand-700 dark:text-brand-300">Everyone</span>}
+              />
               <p className="text-xs text-muted-foreground">
-                Each email will carry {files.length} file{files.length === 1 ? "" : "s"} ({formatBytes(totalBytes)}).
+                Each email will carry {files.length} file{files.length === 1 ? "" : "s"} (
+                {formatBytes(totalBytes)}).
               </p>
             </>
           )}
@@ -795,9 +907,13 @@ function AttachmentsStep({
           <div className="flex gap-3 rounded-lg border border-sky-200 bg-sky-50/70 p-3 text-xs text-sky-900 dark:border-sky-900 dark:bg-sky-950/30 dark:text-sky-100">
             <Info className="mt-0.5 h-4 w-4 shrink-0" />
             <div className="space-y-1">
-              <div className="font-medium">Drop all the files at once — they are matched to people automatically:</div>
+              <div className="font-medium">
+                Drop all the files at once — they are matched to people automatically:
+              </div>
               <ul className="list-disc space-y-0.5 pl-4">
-                {hasColumn && <li>by the file name in your CSV&apos;s attachment column (the extension is optional);</li>}
+                {hasColumn && (
+                  <li>by the file name in your CSV&apos;s attachment column (the extension is optional);</li>
+                )}
                 <li>
                   {hasColumn ? "otherwise " : ""}by a file named after the person —{" "}
                   <code className="rounded bg-white/70 px-1 dark:bg-black/20">asha@gmail.com.pdf</code> or{" "}
@@ -857,16 +973,26 @@ function AttachmentsStep({
                     <span
                       className={cn(
                         "h-2 w-2 shrink-0 rounded-full",
-                        state === "has" ? "bg-brand-500" : state === "missing" ? "bg-red-500" : "bg-slate-300 dark:bg-slate-600",
+                        state === "has"
+                          ? "bg-brand-500"
+                          : state === "missing"
+                            ? "bg-red-500"
+                            : "bg-slate-300 dark:bg-slate-600",
                       )}
                     />
                     <span className="w-48 min-w-0 shrink-0">
                       <span className="block truncate text-sm font-medium">{row.name || row.email}</span>
-                      {row.name && <span className="block truncate text-xs text-muted-foreground">{row.email}</span>}
+                      {row.name && (
+                        <span className="block truncate text-xs text-muted-foreground">{row.email}</span>
+                      )}
                     </span>
                     <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
                       {got.map((f) => (
-                        <FileChip key={f.file.name} name={f.file.name} onRemove={() => onDetach(row.rowNumber, f.file.name)} />
+                        <FileChip
+                          key={f.file.name}
+                          name={f.file.name}
+                          onRemove={() => onDetach(row.rowNumber, f.file.name)}
+                        />
                       ))}
                       {missing.map((n) => (
                         <span
@@ -894,10 +1020,14 @@ function AttachmentsStep({
                     </button>
                   </li>
                 ))}
-                {shown.length === 0 && <li className="px-3 py-6 text-center text-sm text-muted-foreground">Nobody here.</li>}
+                {shown.length === 0 && (
+                  <li className="px-3 py-6 text-center text-sm text-muted-foreground">Nobody here.</li>
+                )}
               </ul>
               {matching.length > 100 && (
-                <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Showing the first 100 of {matching.length}.</p>
+                <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+                  Showing the first 100 of {matching.length}.
+                </p>
               )}
               <input
                 ref={picker}
@@ -905,7 +1035,8 @@ function AttachmentsStep({
                 multiple
                 className="hidden"
                 onChange={(e) => {
-                  if (pickFor !== null && e.target.files?.length) onAttach(pickFor, Array.from(e.target.files));
+                  if (pickFor !== null && e.target.files?.length)
+                    onAttach(pickFor, Array.from(e.target.files));
                   e.target.value = "";
                   setPickFor(null);
                 }}
@@ -923,7 +1054,8 @@ function AttachmentsStep({
                 describe={(f) => {
                   if (f.forAll) return <span className="text-brand-700 dark:text-brand-300">Everyone</span>;
                   const to = recipientsOf(f.file.name);
-                  if (!to.length) return <span className="text-amber-700 dark:text-amber-300">Not matched to anyone</span>;
+                  if (!to.length)
+                    return <span className="text-amber-700 dark:text-amber-300">Not matched to anyone</span>;
                   const names = to.map((r) => r.name || r.email);
                   return (
                     <span title={names.join(", ")}>
@@ -947,7 +1079,12 @@ function FileChip({ name, onRemove }: { name: string; onRemove: () => void }) {
     <span className="inline-flex max-w-[260px] items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs ring-1 ring-inset ring-border">
       <k.icon className="h-3 w-3 shrink-0 opacity-70" />
       <span className="truncate">{name}</span>
-      <button type="button" onClick={onRemove} className="text-muted-foreground hover:text-red-600" aria-label={`Remove ${name}`}>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-muted-foreground hover:text-red-600"
+        aria-label={`Remove ${name}`}
+      >
         <X className="h-3 w-3" />
       </button>
     </span>
@@ -970,7 +1107,10 @@ function FileCards({
       {files.map((f) => {
         const k = fileKind(f.file.name);
         return (
-          <div key={f.file.name} className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5">
+          <div
+            key={f.file.name}
+            className="flex items-center gap-3 rounded-lg border border-border bg-card p-2.5"
+          >
             <span className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-md", k.tone)}>
               <k.icon className="h-4 w-4" />
             </span>
@@ -983,7 +1123,11 @@ function FileCards({
               </div>
               {onToggleAll && (
                 <label className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <input type="checkbox" checked={f.forAll} onChange={(e) => onToggleAll(f.file.name, e.target.checked)} />
+                  <input
+                    type="checkbox"
+                    checked={f.forAll}
+                    onChange={(e) => onToggleAll(f.file.name, e.target.checked)}
+                  />
                   Also send to everyone
                 </label>
               )}

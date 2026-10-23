@@ -533,6 +533,10 @@ model EmailJob {
   // Personal mails batch this job came from, and the files sent with it.
   directSendId    String?        @map("direct_send_id")
   attachmentIds   String[]       @default([]) @map("attachment_ids")
+  // Extra recipients of the same message (single emails): more To, CC, BCC.
+  extraTo         String[]       @default([]) @map("extra_to")
+  cc              String[]       @default([])
+  bcc             String[]       @default([])
   templateKey     String?        @map("template_key")       // for transactional
   templateVersion Int?           @map("template_version")   // for transactional
   emailTemplateId String?        @map("email_template_id")  // for marketing
@@ -693,6 +697,12 @@ model DirectSend {
   fromEmail   String           @map("from_email")
   replyTo     String?          @map("reply_to")
   totalRows   Int              @default(0) @map("total_rows")
+  // Single email (Customize mail → Single email): one message, one row. The
+  // row's email is the first To; the rest of To, CC and BCC live here.
+  single      Boolean          @default(false)
+  toEmails    String[]         @default([]) @map("to_emails")
+  ccEmails    String[]         @default([]) @map("cc_emails")
+  bccEmails   String[]         @default([]) @map("bcc_emails")
   createdById String?          @map("created_by_id")
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")

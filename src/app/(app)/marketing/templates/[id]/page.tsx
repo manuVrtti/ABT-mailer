@@ -3,10 +3,12 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { MarketingTemplateEditor } from "../_editor";
 import { canEditTemplate, canUseTemplate, currentScope } from "@/server/access/scope";
+import { requireAccess } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 
 export default async function MarketingTemplateDetail({ params }: { params: { id: string } }) {
+  await requireAccess("templates.manage");
   const template = await db.emailTemplate.findUnique({ where: { id: params.id } });
   const scope = await currentScope();
   if (!template || !canUseTemplate(scope, template)) notFound();

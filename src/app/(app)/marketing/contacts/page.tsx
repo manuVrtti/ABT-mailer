@@ -3,6 +3,8 @@ import { Users, Search, Upload, FolderClock } from "lucide-react";
 import { db } from "@/lib/db";
 import { PageHeader, Table, THead, TR, TH, TD, Badge, Button, EmptyState } from "@/components/ui";
 import { ContactsTabs } from "./_tabs";
+import { requireAccess } from "@/server/access/permissions";
+import { currentPermissions } from "@/server/access/permissions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Contacts" };
@@ -14,6 +16,8 @@ export default async function ContactsPage({
 }: {
   searchParams: { q?: string; page?: string; college?: string };
 }) {
+  await requireAccess("contacts.manage");
+  const canEdit = (await currentPermissions()).has("contacts.manage");
   const q = searchParams.q?.trim().toLowerCase();
   const college = searchParams.college?.trim();
   const page = Math.max(1, Number(searchParams.page ?? "1"));
@@ -62,10 +66,12 @@ export default async function ContactsPage({
               <FolderClock className="mr-1 h-4 w-4" />
               Imports
             </Button>
-            <Button as="a" href="/marketing/contacts/import">
-              <Upload className="mr-1 h-4 w-4" />
-              Import CSV
-            </Button>
+            {canEdit && (
+              <Button as="a" href="/marketing/contacts/import">
+                <Upload className="mr-1 h-4 w-4" />
+                Import CSV
+              </Button>
+            )}
           </>
         }
       />
@@ -95,10 +101,12 @@ export default async function ContactsPage({
           title="No contacts yet"
           description="Upload a CSV to bring in students, or add one manually."
           action={
-            <Button as="a" href="/marketing/contacts/import">
-              <Upload className="mr-1 h-4 w-4" />
-              Import CSV
-            </Button>
+            canEdit ? (
+              <Button as="a" href="/marketing/contacts/import">
+                <Upload className="mr-1 h-4 w-4" />
+                Import CSV
+              </Button>
+            ) : undefined
           }
         />
       ) : (

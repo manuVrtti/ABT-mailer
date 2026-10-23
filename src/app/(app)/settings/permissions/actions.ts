@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireRole } from "@/lib/auth/session";
-import { PERMISSION_KEYS, type Permission } from "@/server/access/permissions";
+import { MARKETER_ONLY, PERMISSION_KEYS, type Permission } from "@/server/access/permissions";
 
 export type SavePermissionsResult = { ok: true } | { ok: false; error: string };
 
@@ -15,7 +15,10 @@ export async function saveRolePermissions(
   const admin = await requireRole([Role.ADMIN]);
   const clean = (list: string[]) =>
     Array.from(new Set(list.filter((p): p is Permission => (PERMISSION_KEYS as string[]).includes(p))));
-  const next = { MARKETER: clean(input.MARKETER ?? []), VIEWER: clean(input.VIEWER ?? []) };
+  const next = {
+    MARKETER: clean(input.MARKETER ?? []),
+    VIEWER: clean(input.VIEWER ?? []).filter((p) => !MARKETER_ONLY.includes(p)),
+  };
   for (const role of [Role.MARKETER, Role.VIEWER] as const) {
     await db.rolePermission.upsert({
       where: { role },
