@@ -10,6 +10,23 @@ const credentialsSchema = z.object({
   password: z.string().min(1),
 });
 
+/**
+ * The role in the sign-in cookie is only a snapshot from login. Every request
+ * re-reads the person's role and active flag (cached for a few seconds), so a
+ * role change or deactivation applies right away instead of at next login.
+ */
+const ROLE_TTL_MS = 10_000;
+const freshRoles = new Map<string, { at: number; role: Role | null }>();
+
+async function liveRole(uid: string): Promise<Role | null> {
+  const hit = freshRoles.get(uid);
+  if (hit && Date.now() - hit.at < ROLE_TTL_MS) return hit.role;
+  const u = await db.user.findUnique({ where: { id: uid }, select: { role: true, isActive: true } });
+  const role = u?.isActive ? u.role : null;
+  freshRoles.set(uid, { at: Date.now(), role });
+  return role;
+}
+
 export const authOptions: NextAuthOptions = {
   session: { strategy: "jwt", maxAge: 60 * 60 * 8 }, // 8-hour sessions
   pages: { signIn: "/login" },
@@ -44,10 +61,17 @@ export const authOptions: NextAuthOptions = {
       if (user) {
         token.uid = user.id;
         token.role = (user as { role: Role }).role;
+        token.revoked = false;
+      } else if (token.uid) {
+        const role = await liveRole(token.uid as string);
+        if (role) token.role = role;
+        else token.revoked = true; // deleted or deactivated
       }
       return token;
     },
     async session({ session, token }) {
+      // A deactivated or deleted account has no user: every page treats it as signed out.
+      if (token.revoked) return { ...session, user: undefined };
       if (session.user) {
         session.user.id = (token.uid as string) ?? session.user.id;
         session.user.role = token.role as Role;
