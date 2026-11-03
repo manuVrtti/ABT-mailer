@@ -4,7 +4,6 @@ import { db } from "@/lib/db";
 import { CampaignStatus, EmailEventType, Prisma } from "@prisma/client";
 import { currentScope, fromEmailSql, fromEmailWhere, type SenderScope } from "@/server/access/scope";
 import { PageHeader, Card, EmptyState, Badge, buttonClasses } from "@/components/ui";
-import { AnalyticsTabs } from "./_tabs";
 import { MetricBar } from "@/components/metric-bar";
 import { LineChart, type LineSeries } from "@/components/line-chart";
 import { requirePermission } from "@/server/access/permissions";
@@ -112,7 +111,6 @@ export default async function MarketingAnalyticsPage() {
         title="Analytics"
         description="Rates across every marketing send. Individual campaign pages show per-campaign numbers."
       />
-      <AnalyticsTabs active="overview" />
 
       {/* Brevo-style: big hero number + progress-bar grid */}
       <div className="rounded-lg border border-border bg-card p-6 shadow-sm">

@@ -384,7 +384,7 @@ export default async function DashboardPage() {
             value={conv.cur.toLocaleString()}
             delta={change(conv.cur, conv.prev)}
             sub="Klymb actions after an email"
-            href="/marketing/analytics/conversions"
+            href="/marketing/conversions/klymb-actions"
           />
         </div>
       )}

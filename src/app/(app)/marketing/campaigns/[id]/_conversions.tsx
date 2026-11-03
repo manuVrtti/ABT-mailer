@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { sourceConversions } from "@/server/conversions/stats";
 import { lastConversionRun } from "@/server/conversions/refresh";
 import { ATTRIBUTION_WINDOW_DAYS, parseGoal } from "@/server/conversions/kinds";
-import { GoalPicker, RefreshConversionsButton } from "../../analytics/conversions/_controls";
+import { GoalPicker, RefreshConversionsButton } from "../../conversions/klymb-actions/_controls";
 
 const WHEN = new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 

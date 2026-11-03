@@ -271,7 +271,7 @@ export default async function DirectSendPage({
             Opens are counted when the recipient&apos;s email app loads images, so the real open rate is
             usually a bit higher. Spam complaints: {stats.complained}.{" "}
             <Link
-              href="/marketing/analytics/conversions"
+              href="/marketing/conversions/klymb-actions"
               className="text-brand-700 hover:underline dark:text-brand-300"
             >
               {converted.toLocaleString()} {converted === 1 ? "person" : "people"} acted in Klymb within a
