@@ -7,18 +7,21 @@ import { requireRole } from "@/lib/auth/session";
 import { refreshConversions } from "@/server/conversions/refresh";
 import { goalSchema, type ConversionKind } from "@/server/conversions/kinds";
 import { loadKlymbFilterOptions } from "@/server/klymb/options";
-import { requirePermission } from "@/server/access/permissions";
+import { requireAccess, requirePermission } from "@/server/access/permissions";
 
 export type RefreshActionResult = { ok: true; message: string } | { ok: false; error: string };
 
 export async function refreshConversionsNow(): Promise<RefreshActionResult> {
-  await requirePermission("analytics.view");
+  await requireAccess("conversions.view");
   try {
     const r = await refreshConversions();
-    revalidatePath("/marketing/analytics/conversions");
+    revalidatePath("/marketing/conversions/klymb-actions");
     revalidatePath("/dashboard");
     if (r.skipped) return { ok: true, message: "A refresh is already running — reload in a minute." };
-    return { ok: true, message: `${r.conversions.toLocaleString()} conversions from ${r.actions.toLocaleString()} Klymb actions.` };
+    return {
+      ok: true,
+      message: `${r.conversions.toLocaleString()} conversions from ${r.actions.toLocaleString()} Klymb actions.`,
+    };
   } catch (err) {
     return { ok: false, error: (err as Error).message };
   }
@@ -27,22 +30,48 @@ export async function refreshConversionsNow(): Promise<RefreshActionResult> {
 export type GoalOption = { kind: ConversionKind; ref?: string; label: string; count?: number };
 
 /** What a campaign goal can be: any of a kind, or one specific event / cohort. Reads Klymb. */
-export async function loadGoalOptions(): Promise<{ ok: true; options: GoalOption[] } | { ok: false; error: string }> {
+export async function loadGoalOptions(): Promise<
+  { ok: true; options: GoalOption[] } | { ok: false; error: string }
+> {
   await requirePermission("campaigns.manage");
   try {
     const o = await loadKlymbFilterOptions();
     const options: GoalOption[] = [
       { kind: "SIGNUP", label: "Signed up to Klymb" },
       { kind: "WORKSHOP", label: "Registered for any workshop" },
-      ...o.workshops.map((w) => ({ kind: "WORKSHOP" as const, ref: w.id, label: `Registered for ${w.label}`, count: w.count })),
+      ...o.workshops.map((w) => ({
+        kind: "WORKSHOP" as const,
+        ref: w.id,
+        label: `Registered for ${w.label}`,
+        count: w.count,
+      })),
       { kind: "HACKATHON", label: "Registered for any hackathon" },
-      ...o.hackathons.map((h) => ({ kind: "HACKATHON" as const, ref: h.id, label: `Registered for ${h.label}`, count: h.count })),
+      ...o.hackathons.map((h) => ({
+        kind: "HACKATHON" as const,
+        ref: h.id,
+        label: `Registered for ${h.label}`,
+        count: h.count,
+      })),
       { kind: "VIDEOTHON", label: "Registered for any VideoThon" },
-      ...o.videothons.map((v) => ({ kind: "VIDEOTHON" as const, ref: v.id, label: `Registered for ${v.label}`, count: v.count })),
+      ...o.videothons.map((v) => ({
+        kind: "VIDEOTHON" as const,
+        ref: v.id,
+        label: `Registered for ${v.label}`,
+        count: v.count,
+      })),
       { kind: "SUBMISSION", label: "Submitted a hackathon / VideoThon entry" },
-      ...[...o.hackathons, ...o.videothons].map((h) => ({ kind: "SUBMISSION" as const, ref: h.id, label: `Submitted for ${h.label}` })),
+      ...[...o.hackathons, ...o.videothons].map((h) => ({
+        kind: "SUBMISSION" as const,
+        ref: h.id,
+        label: `Submitted for ${h.label}`,
+      })),
       { kind: "COHORT", label: "Enrolled in any cohort" },
-      ...o.cohorts.map((c) => ({ kind: "COHORT" as const, ref: c.id, label: `Enrolled in ${c.label}`, count: c.count })),
+      ...o.cohorts.map((c) => ({
+        kind: "COHORT" as const,
+        ref: c.id,
+        label: `Enrolled in ${c.label}`,
+        count: c.count,
+      })),
       { kind: "JOB", label: "Applied to a job" },
       { kind: "MOCK_INTERVIEW", label: "Took a mock interview" },
     ];
@@ -71,6 +100,6 @@ export async function setCampaignGoal(campaignId: string, rawGoal: unknown): Pro
     },
   });
   revalidatePath(`/marketing/campaigns/${campaignId}`);
-  revalidatePath("/marketing/analytics/conversions");
+  revalidatePath("/marketing/conversions/klymb-actions");
   return { ok: true, message: rawGoal ? "Goal saved" : "Goal removed" };
 }
