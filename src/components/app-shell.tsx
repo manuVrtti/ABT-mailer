@@ -85,7 +85,6 @@ const SECTIONS: NavSection[] = [
       { href: "/transactional/templates", label: "Templates", icon: Mail, needs: "transactional.manage" },
       { href: "/transactional/events", label: "Events", icon: Zap, needs: "transactional.manage" },
       { href: "/transactional/logs", label: "Logs", icon: ScrollText, needs: "logs.view" },
-      { href: "/transactional/analytics", label: "Analytics", icon: BarChart3, needs: "analytics.view" },
     ],
   },
 ];
