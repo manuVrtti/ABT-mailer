@@ -12,6 +12,8 @@ const nextConfig = {
     return [
       { source: "/marketing/personal", destination: "/marketing/customize", permanent: true },
       { source: "/marketing/personal/:path*", destination: "/marketing/customize/:path*", permanent: true },
+      // Transactional analytics is the "Transactional" type filter on Analytics now.
+      { source: "/transactional/analytics", destination: "/marketing/analytics?types=transactional", permanent: true },
       // Conversions moved out of Analytics into its own section.
       { source: "/marketing/analytics/conversions", destination: "/marketing/conversions/klymb-actions", permanent: true },
     ];
